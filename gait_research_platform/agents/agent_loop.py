@@ -10,10 +10,24 @@ from gait_research_platform.agents.llm_client import OpenAICompatibleClient
 from gait_research_platform.core.config_loader import load_config
 
 
-def build_agent(config_path: str) -> ExperimentAgent:
+def build_agent(
+    config_path: str,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+) -> ExperimentAgent:
     base_config = load_config(config_path)
     llm_client = None
-    if base_config.get("agent", {}).get("enabled", False) or os.getenv("OPENAI_API_KEY"):
+    if api_key or base_url or model:
+        llm_client = OpenAICompatibleClient(
+            api_key=api_key,
+            base_url=base_url,
+            default_model=model or base_config["agent"]["model"],
+        )
+        base_config["agent"]["enabled"] = True
+        if model:
+            base_config["agent"]["model"] = model
+    elif base_config.get("agent", {}).get("enabled", False) or os.getenv("OPENAI_API_KEY"):
         llm_client = OpenAICompatibleClient(default_model=base_config["agent"]["model"])
     return ExperimentAgent(base_config, llm_client=llm_client)
 
@@ -21,6 +35,9 @@ def build_agent(config_path: str) -> ExperimentAgent:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Thin CLI wrapper for the gait research agent.")
     parser.add_argument("--base-config", default="gait_research_platform/configs/experiments/contrastive.yaml")
+    parser.add_argument("--api-key", help="Optional OpenAI-compatible API key. Falls back to OPENAI_API_KEY.")
+    parser.add_argument("--base-url", help="Optional OpenAI-compatible base URL. Falls back to OPENAI_BASE_URL.")
+    parser.add_argument("--model", help="Optional model name. Falls back to OPENAI_MODEL or config value.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     plan_parser = subparsers.add_parser("plan", help="Plan experiment configs.")
@@ -41,7 +58,12 @@ def main() -> None:
     combined_parser.add_argument("--approve", action="store_true")
 
     args = parser.parse_args()
-    agent = build_agent(args.base_config)
+    agent = build_agent(
+        config_path=args.base_config,
+        api_key=args.api_key,
+        base_url=args.base_url,
+        model=args.model,
+    )
 
     if args.command == "plan":
         plans = agent.plan(goal=args.goal, use_llm=args.use_llm, num_candidates=args.num_candidates)

@@ -114,6 +114,17 @@ python -m gait_research_platform.agents.agent_loop \
   plan --goal "Learn stable gait embeddings from velocity signals"
 ```
 
+You can connect an OpenAI-compatible model either through environment variables or directly through CLI flags:
+
+```bash
+python -m gait_research_platform.agents.agent_loop \
+  --base-config gait_research_platform/configs/experiments/contrastive.yaml \
+  --api-key "YOUR_OPENAI_TOKEN" \
+  --base-url "https://api.openai.com/v1" \
+  --model "gpt-4o-mini" \
+  plan --goal "Learn stable gait embeddings from velocity signals" --use-llm
+```
+
 ```bash
 python -m gait_research_platform.agents.agent_loop \
   --base-config gait_research_platform/configs/experiments/contrastive.yaml \
