@@ -6,7 +6,7 @@ from typing import Any
 
 
 class LLMClient:
-    def generate_text(self, messages: list[dict[str, str]], model: str | None = None, temperature: float = 0.2) -> str:
+    def generate(self, prompt: str, system_prompt: str | None = None, temperature: float = 0.2) -> str:
         raise NotImplementedError
 
 
@@ -21,7 +21,7 @@ class OpenAICompatibleClient(LLMClient):
         self.base_url = base_url or os.getenv("OPENAI_BASE_URL")
         self.default_model = default_model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-    def generate_text(self, messages: list[dict[str, str]], model: str | None = None, temperature: float = 0.2) -> str:
+    def generate(self, prompt: str, system_prompt: str | None = None, temperature: float = 0.2) -> str:
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY is not configured.")
         try:
@@ -33,8 +33,12 @@ class OpenAICompatibleClient(LLMClient):
         if self.base_url:
             client_kwargs["base_url"] = self.base_url
         client = OpenAI(**client_kwargs)
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
         response = client.chat.completions.create(
-            model=model or self.default_model,
+            model=self.default_model,
             temperature=temperature,
             messages=messages,
         )

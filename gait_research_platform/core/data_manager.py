@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -123,7 +124,7 @@ class DataManager:
         embeddings.to_parquet(path, index=False)
         return path
 
-    def save_metrics(self, experiment_dir: Path, metrics: dict[str, Any]) -> Path:
+    def save_metrics(self, experiment_dir: Path, metrics: dict[str, Any] | None) -> Path:
         path = experiment_dir / "metrics.json"
         path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
         return path
@@ -137,6 +138,49 @@ class DataManager:
         path = experiment_dir / "config.yaml"
         save_config(config, path)
         return path
+
+    def save_error(self, experiment_dir: Path, error: dict[str, Any] | None) -> Path:
+        path = experiment_dir / "error.json"
+        path.write_text(json.dumps(error, indent=2), encoding="utf-8")
+        return path
+
+    def load_error(self, experiment_dir: Path) -> dict[str, Any] | None:
+        path = experiment_dir / "error.json"
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def load_metrics(self, experiment_dir: Path) -> dict[str, Any] | None:
+        path = experiment_dir / "metrics.json"
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def load_summary(self, experiment_dir: Path) -> dict[str, Any] | None:
+        path = experiment_dir / "summary.json"
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def result_dir(self, experiment_id: str) -> Path:
+        return self.results_dir / experiment_id
+
+    def create_logger(self, experiment_dir: Path, logger_name: str) -> tuple[logging.Logger, Path]:
+        log_path = experiment_dir / "logs.txt"
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+        logger.handlers = []
+        handler = logging.FileHandler(log_path, encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+        logger.addHandler(handler)
+        return logger, log_path
+
+    def close_logger(self, logger: logging.Logger) -> None:
+        for handler in list(logger.handlers):
+            handler.flush()
+            handler.close()
+            logger.removeHandler(handler)
 
     def append_manifest(self, entry: dict[str, Any]) -> None:
         with self.manifest_path.open("a", encoding="utf-8") as handle:

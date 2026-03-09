@@ -1,6 +1,6 @@
 # Gait Research Platform MVP
 
-Research-oriented platform for gait motion representation experiments. The MVP ships a configuration-driven pipeline, a velocity-based signal builder, a temporal CNN embedding model, a contrastive training experiment, embedding visualization, and a basic AI agent layer.
+Research-oriented platform for gait motion representation experiments. The MVP ships a configuration-driven pipeline, a velocity-based signal builder, a temporal CNN embedding model, a contrastive training experiment, embedding visualization, and a bounded AI agent orchestration layer.
 
 ## Structure
 
@@ -17,6 +17,7 @@ Repository governance and research workflow conventions are documented in:
 
 - [docs/engineering_principles.md](/Users/drava/Documents/Hound/hf-playground/docs/engineering_principles.md)
 - [docs/github_research_workflow.md](/Users/drava/Documents/Hound/hf-playground/docs/github_research_workflow.md)
+- [docs/agent_architecture.md](/Users/drava/Documents/Hound/hf-playground/docs/agent_architecture.md)
 
 ## Install
 
@@ -55,6 +56,19 @@ Each manifest entry records the experiment id, timestamp, config path, status, a
 
 ## AI Agent integration
 
+The agent is intentionally limited to:
+
+- generate experiment configs
+- request and run approved experiments
+- review results and recommend the next config-safe step
+
+The agent does not:
+
+- edit source code
+- run Git operations
+- preprocess datasets
+- manipulate large datasets directly
+
 Set environment variables:
 
 ```bash
@@ -63,32 +77,109 @@ export OPENAI_BASE_URL=https://api.openai.com/v1
 export OPENAI_MODEL=gpt-4o-mini
 ```
 
+Compatible backends include any OpenAI-compatible endpoint, such as OpenAI, Ollama, vLLM, and compatible gateways.
+
 Use the Python API:
 
 ```python
 from gait_research_platform.agents.experiment_agent import ExperimentAgent
+from gait_research_platform.agents.llm_client import OpenAICompatibleClient
 from gait_research_platform.core.config_loader import load_config
 
 base_config = load_config("gait_research_platform/configs/experiments/contrastive.yaml")
-agent = ExperimentAgent(base_config)
+agent = ExperimentAgent(
+    base_config,
+    llm_client=OpenAICompatibleClient(),
+)
 
-configs = agent.plan(goal="Explore larger embeddings for velocity-based gait representation")
+configs = agent.plan(
+    goal="Explore larger embeddings for velocity-based gait representation",
+    allowed_signals=["velocity_signal", "pose_signal"],
+    allowed_representations=["temporal_embedding"],
+    use_llm=True,
+    num_candidates=2,
+)
 saved = agent.save_generated_plan(configs[0], name="velocity_embedding_search")
-result = agent.run(configs[0])
-review = agent.review({
-    "experiment_id": result["experiment_id"],
-    "status": "success",
-    "metrics": result["metrics"],
-})
+run_request = agent.request_run(configs[0])
+result = agent.run(run_request, approved=True)
+review = agent.review(result)
 print(saved, review)
 ```
 
-The agent boundary is intentionally narrow in the MVP:
+Operator CLI is available as a thin wrapper around the same Python API:
 
-- it can generate YAML-compatible configs
-- it can run experiments
-- it can read results and propose next experiments
-- it does not edit source code
+```bash
+python -m gait_research_platform.agents.agent_loop \
+  --base-config gait_research_platform/configs/experiments/contrastive.yaml \
+  plan --goal "Learn stable gait embeddings from velocity signals"
+```
+
+```bash
+python -m gait_research_platform.agents.agent_loop \
+  --base-config gait_research_platform/configs/experiments/contrastive.yaml \
+  run --config gait_research_platform/configs/experiments/contrastive.yaml --approve
+```
+
+```bash
+python -m gait_research_platform.agents.agent_loop \
+  --base-config gait_research_platform/configs/experiments/contrastive.yaml \
+  review --experiment-id YOUR_EXPERIMENT_ID
+```
+
+## Result and error artifacts
+
+Every run creates a result directory with an auditable artifact surface:
+
+- `config.yaml`
+- `logs.txt`
+- `metrics.json`
+- `summary.json`
+- `error.json`
+- `plots/`
+- `artifacts/`
+
+Structured experiment results follow this shape:
+
+```json
+{
+  "experiment_id": "20260310_123456_abcd1234",
+  "status": "success",
+  "result_dir": "...",
+  "metrics": {
+    "final_loss": 0.42,
+    "num_sequences": 6,
+    "embedding_dim": 64
+  },
+  "summary": {
+    "experiment_id": "20260310_123456_abcd1234",
+    "status": "success"
+  },
+  "error": null
+}
+```
+
+Failed runs do not crash the agent boundary. They return a structured error payload:
+
+```json
+{
+  "experiment_id": "20260310_123500_deadbeef",
+  "status": "failed",
+  "result_dir": "...",
+  "metrics": null,
+  "summary": {
+    "experiment_id": "20260310_123500_deadbeef",
+    "status": "failed"
+  },
+  "error": {
+    "type": "FileNotFoundError",
+    "message": "Pose file missing for video 'sample_00'. No pose extractor configured. Add parquet pose files or register a PoseExtractor.",
+    "traceback": null,
+    "stage": "signal"
+  }
+}
+```
+
+Set `DEBUG_AGENT=true` to include traceback details in `error.json` and returned error payloads.
 
 ## Default env layout
 

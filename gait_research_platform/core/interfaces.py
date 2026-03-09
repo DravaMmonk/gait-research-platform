@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -79,3 +80,13 @@ class AnalysisTask(ABC):
         output_dir: Path,
     ) -> dict[str, Any]:
         raise NotImplementedError
+
+
+@dataclass
+class ExperimentRunContext:
+    experiment_id: str
+    result_dir: Path
+    plots_dir: Path
+    artifacts_dir: Path
+    set_stage: Any
+    logger: Any
