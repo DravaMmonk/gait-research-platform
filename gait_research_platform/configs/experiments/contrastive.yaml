@@ -1,0 +1,47 @@
+experiment:
+  name: contrastive_training
+  experiment_id: auto
+  seed: 42
+
+data:
+  root_dir: .
+  videos_dir: gait_research_platform/data/videos
+  poses_dir: gait_research_platform/data/poses
+  signals_dir: gait_research_platform/data/signals
+  embeddings_dir: gait_research_platform/data/embeddings
+  results_dir: gait_research_platform/results
+  manifest_path: gait_research_platform/results/manifest.jsonl
+  pose_extractor: null
+  cache_signals: true
+
+signals:
+  - name: velocity_signal
+    enabled: true
+    params:
+      normalize: true
+
+representation:
+  model: temporal_embedding
+  params:
+    input_dim: auto
+    embedding_dim: 64
+    channels: [32, 64]
+    kernel_size: 3
+
+training:
+  method: contrastive
+  batch_size: 4
+  epochs: 3
+  learning_rate: 0.001
+  temperature: 0.1
+  num_workers: 0
+
+analysis:
+  - name: embedding_visualization
+    params:
+      method: tsne
+
+agent:
+  enabled: false
+  provider: openai_compatible
+  model: gpt-4o-mini
