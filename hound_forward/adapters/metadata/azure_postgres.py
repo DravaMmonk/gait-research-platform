@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import JSON, DateTime, Float, String, create_engine, inspect, select, text
@@ -106,6 +107,7 @@ class AzurePostgresMetadataRepository:
     def __init__(self, database_url: str) -> None:
         engine_kwargs: dict[str, Any] = {"future": True}
         if database_url.startswith("sqlite"):
+            self._ensure_sqlite_parent_dir(database_url)
             engine_kwargs["connect_args"] = {"check_same_thread": False}
             if database_url.endswith(":memory:"):
                 engine_kwargs["poolclass"] = StaticPool
@@ -349,6 +351,22 @@ class AzurePostgresMetadataRepository:
                 asset_columns = {column["name"] for column in inspector.get_columns("assets")}
                 if "session_id" not in asset_columns:
                     connection.execute(text("ALTER TABLE assets ADD COLUMN session_id VARCHAR"))
+
+    @staticmethod
+    def _ensure_sqlite_parent_dir(database_url: str) -> None:
+        if database_url.endswith(":memory:"):
+            return
+        relative_prefix = "sqlite+pysqlite:///"
+        absolute_prefix = "sqlite+pysqlite:////"
+        if database_url.startswith(absolute_prefix):
+            raw_path = database_url.removeprefix("sqlite+pysqlite://")
+            db_path = Path(raw_path)
+        elif database_url.startswith(relative_prefix):
+            raw_path = database_url.removeprefix(relative_prefix)
+            db_path = Path.cwd() / raw_path
+        else:
+            return
+        db_path.parent.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def _to_run_record(model: RunModel) -> RunRecord:
