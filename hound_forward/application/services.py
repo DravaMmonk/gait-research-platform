@@ -103,9 +103,12 @@ class ResearchPlatformService:
 
     def process_next_job(self) -> RunRecord | None:
         job = self.container.queue.dequeue()
-        if job is None:
-            return None
-        run = self._require_run(job.run_id)
+        if job is not None:
+            run = self._require_run(job.run_id)
+        else:
+            run = self._find_next_queued_run()
+            if run is None:
+                return None
         run.status = RunStatus.RUNNING
         run.updated_at = utc_now()
         self.container.metadata.update_run(run)
@@ -249,3 +252,9 @@ class ResearchPlatformService:
         if run is None:
             raise KeyError(f"Unknown run_id: {run_id}")
         return run
+
+    def _find_next_queued_run(self) -> RunRecord | None:
+        for run in self.container.metadata.list_runs():
+            if run.status == RunStatus.QUEUED:
+                return run
+        return None
