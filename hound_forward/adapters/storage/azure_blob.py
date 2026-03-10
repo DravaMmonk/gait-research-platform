@@ -28,3 +28,29 @@ class AzureBlobArtifactStore:
                 "blob_uri": f"{self.account_url}/{blob_path}",
             },
         )
+
+    def put_bytes(
+        self,
+        *,
+        session_id: str,
+        name: str,
+        content: bytes,
+        kind: str,
+        mime_type: str,
+        metadata: dict | None = None,
+    ) -> AssetRecord:
+        checksum = hashlib.sha256(content).hexdigest()
+        blob_path = f"{self.container}/sessions/{session_id}/{name}"
+        return AssetRecord(
+            session_id=session_id,
+            kind=AssetKind(kind),
+            blob_path=blob_path,
+            checksum=checksum,
+            mime_type=mime_type,
+            metadata={
+                "storage_backend": "azure_blob",
+                "account_url": self.account_url,
+                "blob_uri": f"{self.account_url}/{blob_path}",
+                **(metadata or {}),
+            },
+        )

@@ -10,6 +10,15 @@ A session represents a research or intake context for one dog or one collection 
 
 A run is the canonical execution unit. Pipeline runs, metric evaluation, agent analysis, and experiment comparison all use the same top-level model.
 
+Public runtime validation statuses are:
+
+- `created`
+- `queued`
+- `running`
+- `completed`
+- `failed`
+- `cancelled`
+
 ### Asset
 
 An asset is metadata that points to a Blob-backed artifact. The database stores the path, checksum, MIME type, and lightweight metadata only.
@@ -31,5 +40,6 @@ The `ExperimentManifest` drives execution. It contains:
 - metric list
 - analysis list
 - execution policy
+- input asset ids
 
 The manifest is saved as a run asset and becomes part of the audit surface.

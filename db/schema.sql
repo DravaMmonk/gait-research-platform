@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS runs (
     run_kind TEXT NOT NULL,
     status TEXT NOT NULL,
     manifest JSONB NOT NULL,
+    input_asset_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
     summary JSONB NOT NULL DEFAULT '{}'::jsonb,
     error JSONB NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -35,7 +36,8 @@ CREATE INDEX IF NOT EXISTS idx_run_events_run_created ON run_events (run_id, cre
 
 CREATE TABLE IF NOT EXISTS assets (
     asset_id UUID PRIMARY KEY,
-    run_id UUID NOT NULL REFERENCES runs(run_id),
+    run_id UUID NULL REFERENCES runs(run_id),
+    session_id UUID NULL REFERENCES sessions(session_id),
     kind TEXT NOT NULL,
     blob_path TEXT NOT NULL,
     checksum TEXT NOT NULL,
@@ -47,6 +49,7 @@ CREATE TABLE IF NOT EXISTS assets (
 );
 
 CREATE INDEX IF NOT EXISTS idx_assets_run_kind ON assets (run_id, kind);
+CREATE INDEX IF NOT EXISTS idx_assets_session_kind ON assets (session_id, kind);
 
 CREATE TABLE IF NOT EXISTS metric_definitions (
     metric_definition_id UUID PRIMARY KEY,

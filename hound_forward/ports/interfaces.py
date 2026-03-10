@@ -34,6 +34,9 @@ class MetadataRepository(ABC):
     def list_runs(self, session_id: str | None = None) -> list[RunRecord]: ...
 
     @abstractmethod
+    def get_asset(self, asset_id: str) -> AssetRecord | None: ...
+
+    @abstractmethod
     def append_run_event(self, event: RunEvent) -> RunEvent: ...
 
     @abstractmethod
@@ -44,6 +47,9 @@ class MetadataRepository(ABC):
 
     @abstractmethod
     def list_assets(self, run_id: str) -> list[AssetRecord]: ...
+
+    @abstractmethod
+    def list_session_assets(self, session_id: str, kind: str | None = None) -> list[AssetRecord]: ...
 
     @abstractmethod
     def register_metric_definition(self, metric_definition: MetricDefinition) -> MetricDefinition: ...
@@ -79,6 +85,18 @@ class MetadataRepository(ABC):
 class ArtifactStore(ABC):
     @abstractmethod
     def put_json(self, run_id: str, name: str, payload: dict[str, Any], kind: str) -> AssetRecord: ...
+
+    @abstractmethod
+    def put_bytes(
+        self,
+        *,
+        session_id: str,
+        name: str,
+        content: bytes,
+        kind: str,
+        mime_type: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> AssetRecord: ...
 
 
 class JobQueue(ABC):

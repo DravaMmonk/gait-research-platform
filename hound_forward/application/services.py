@@ -9,13 +9,16 @@ from hound_forward.domain import (
     AssetRecord,
     ExperimentManifest,
     MetricDefinition,
+    MetricReadResponse,
     MetricResult,
+    RunDetailResponse,
     RunEvent,
     RunKind,
     RunRecord,
     RunStatus,
     SessionRecord,
     ToolResponse,
+    VideoUploadResponse,
 )
 from hound_forward.ports import ArtifactStore, Job, JobQueue, MetadataRepository, RunExecutor
 
@@ -46,14 +49,48 @@ class ResearchPlatformService:
         session = self.container.metadata.get_session(session_id)
         if session is None:
             raise KeyError(f"Unknown session_id: {session_id}")
-        run = RunRecord(session_id=session_id, run_kind=run_kind, manifest=manifest)
+        if not manifest.input_asset_ids:
+            raise ValueError("Run creation requires at least one input asset id for runtime validation.")
+        for asset_id in manifest.input_asset_ids:
+            asset = self.container.metadata.get_asset(asset_id)
+            if asset is None or asset.session_id != session_id:
+                raise KeyError(f"Unknown session-scoped input asset: {asset_id}")
+        run = RunRecord(session_id=session_id, run_kind=run_kind, manifest=manifest, input_asset_ids=list(manifest.input_asset_ids))
         saved = self.container.metadata.create_run(run)
         self.container.metadata.append_run_event(
-            RunEvent(run_id=saved.run_id, status=RunStatus.PENDING, message="Run created.", payload={"manifest_id": manifest.id})
+            RunEvent(run_id=saved.run_id, status=RunStatus.CREATED, message="Run created.", payload={"manifest_id": manifest.id})
         )
         manifest_asset = self.container.artifact_store.put_json(saved.run_id, "manifest.json", manifest.model_dump(mode="json"), "manifest")
         self.container.metadata.register_asset(manifest_asset)
         return saved
+
+    def upload_session_video(
+        self,
+        *,
+        session_id: str,
+        file_name: str,
+        content: bytes,
+        mime_type: str = "video/mp4",
+    ) -> VideoUploadResponse:
+        session = self.container.metadata.get_session(session_id)
+        if session is None:
+            raise KeyError(f"Unknown session_id: {session_id}")
+        asset = self.container.artifact_store.put_bytes(
+            session_id=session_id,
+            name=file_name,
+            content=content,
+            kind="video",
+            mime_type=mime_type,
+            metadata={
+                "placeholder_flags": {"dummy": True, "fake": False, "placeholder": True},
+                "runtime_validation": True,
+            },
+        )
+        registered = self.container.metadata.register_asset(asset)
+        return VideoUploadResponse(session_id=session_id, asset=registered)
+
+    def list_session_videos(self, session_id: str) -> list[AssetRecord]:
+        return self.container.metadata.list_session_assets(session_id=session_id, kind="video")
 
     def enqueue_run(self, run_id: str) -> RunRecord:
         run = self._require_run(run_id)
@@ -75,7 +112,7 @@ class ResearchPlatformService:
         self.container.metadata.append_run_event(RunEvent(run_id=run.run_id, status=RunStatus.RUNNING, message="Run started."))
         try:
             summary, assets, metric_results = self.container.executor.execute(run)
-            run.status = RunStatus.SUCCEEDED
+            run.status = RunStatus.COMPLETED
             run.summary = summary
             run.error = None
             run.updated_at = utc_now()
@@ -85,7 +122,7 @@ class ResearchPlatformService:
             for metric_result in metric_results:
                 self.container.metadata.register_metric_result(metric_result)
             self.container.metadata.append_run_event(
-                RunEvent(run_id=run.run_id, status=RunStatus.SUCCEEDED, message="Run completed.", payload=summary)
+                RunEvent(run_id=run.run_id, status=RunStatus.COMPLETED, message="Run completed.", payload=summary)
             )
         except Exception as exc:
             run.status = RunStatus.FAILED
@@ -105,6 +142,19 @@ class ResearchPlatformService:
 
     def list_assets(self, run_id: str) -> list[AssetRecord]:
         return self.container.metadata.list_assets(run_id)
+
+    def get_run_detail(self, run_id: str) -> RunDetailResponse:
+        run = self.get_run(run_id)
+        input_assets = [
+            asset for asset_id in run.input_asset_ids if (asset := self.container.metadata.get_asset(asset_id)) is not None
+        ]
+        run_assets = self.list_assets(run_id)
+        return RunDetailResponse(
+            run=run,
+            assets=input_assets + run_assets,
+            metrics=self.list_metric_results(run_id),
+            events=self.container.metadata.list_run_events(run_id),
+        )
 
     def register_metric_definition(
         self,
@@ -127,6 +177,14 @@ class ResearchPlatformService:
 
     def list_metric_results(self, run_id: str | None = None) -> list[MetricResult]:
         return self.container.metadata.list_metric_results(run_id=run_id)
+
+    def read_metrics(self, run_id: str) -> MetricReadResponse:
+        metrics_asset = next((asset for asset in self.list_assets(run_id) if asset.kind.value == "metric_result"), None)
+        return MetricReadResponse(
+            run_id=run_id,
+            metric_results=self.list_metric_results(run_id=run_id),
+            metrics_asset=metrics_asset,
+        )
 
     def compare_runs(self, left_run_id: str, right_run_id: str) -> dict[str, Any]:
         return self.container.metadata.compare_runs(left_run_id, right_run_id)
@@ -155,6 +213,10 @@ class ResearchPlatformService:
         assets = [item.model_dump(mode="json") for item in self.list_assets(run_id)]
         return ToolResponse(ok=True, status="ok", data={"assets": assets})
 
+    def tool_read_metrics(self, run_id: str) -> ToolResponse:
+        metrics = self.read_metrics(run_id)
+        return ToolResponse(ok=True, resource_id=run_id, status="ok", data=metrics.model_dump(mode="json"))
+
     def tool_list_metrics(self, run_id: str | None = None) -> ToolResponse:
         definitions = [item.model_dump(mode="json") for item in self.list_metric_definitions()]
         results = [item.model_dump(mode="json") for item in self.list_metric_results(run_id=run_id)]
@@ -180,7 +242,7 @@ class ResearchPlatformService:
 
     def tool_search_dataset(self, breed: str | None = None, video_ids: list[str] | None = None) -> ToolResponse:
         filters = {"breed": breed, "video_ids": video_ids or []}
-        return ToolResponse(ok=True, status="ok", data={"filters": filters, "message": "Dataset search scaffold."})
+        return ToolResponse(ok=True, status="ok", data={"filters": filters, "message": "Placeholder dataset search scaffold."})
 
     def _require_run(self, run_id: str) -> RunRecord:
         run = self.container.metadata.get_run(run_id)

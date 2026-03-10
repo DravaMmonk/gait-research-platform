@@ -1,3 +1,3 @@
-from .executor import DeterministicLocalRunExecutor
+from .dummy_pipeline import DummyRuntimeValidationPipeline
 
-__all__ = ["DeterministicLocalRunExecutor"]
+__all__ = ["DummyRuntimeValidationPipeline"]

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, String, create_engine, select
+from sqlalchemy import JSON, DateTime, Float, String, create_engine, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -44,6 +44,7 @@ class RunModel(Base):
     run_kind: Mapped[str] = mapped_column(String)
     status: Mapped[str] = mapped_column(String, index=True)
     manifest_json: Mapped[dict[str, Any]] = mapped_column("manifest", JSON)
+    input_asset_ids_json: Mapped[list[str]] = mapped_column("input_asset_ids", JSON, default=list)
     summary_json: Mapped[dict[str, Any]] = mapped_column("summary", JSON, default=dict)
     error_json: Mapped[dict[str, Any] | None] = mapped_column("error", JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
@@ -65,7 +66,8 @@ class AssetModel(Base):
     __tablename__ = "assets"
 
     asset_id: Mapped[str] = mapped_column(String, primary_key=True)
-    run_id: Mapped[str] = mapped_column(String, index=True)
+    run_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     kind: Mapped[str] = mapped_column(String, index=True)
     blob_path: Mapped[str] = mapped_column(String)
     checksum: Mapped[str] = mapped_column(String)
@@ -112,6 +114,7 @@ class AzurePostgresMetadataRepository:
 
     def create_all(self) -> None:
         Base.metadata.create_all(self.engine)
+        self._ensure_local_runtime_validation_columns()
 
     def create_session(self, session: SessionRecord) -> SessionRecord:
         with self._session_factory.begin() as db:
@@ -150,6 +153,7 @@ class AzurePostgresMetadataRepository:
                     run_kind=run.run_kind.value,
                     status=run.status.value,
                     manifest_json=run.manifest.model_dump(mode="json"),
+                    input_asset_ids_json=run.input_asset_ids,
                     summary_json=run.summary,
                     error_json=run.error,
                     created_at=run.created_at,
@@ -168,6 +172,7 @@ class AzurePostgresMetadataRepository:
             model.error_json = run.error
             model.updated_at = run.updated_at
             model.manifest_json = run.manifest.model_dump(mode="json")
+            model.input_asset_ids_json = run.input_asset_ids
         return run
 
     def get_run(self, run_id: str) -> RunRecord | None:
@@ -198,6 +203,13 @@ class AzurePostgresMetadataRepository:
             )
         return event
 
+    def get_asset(self, asset_id: str) -> AssetRecord | None:
+        with self._session_factory() as db:
+            model = db.get(AssetModel, asset_id)
+            if model is None:
+                return None
+            return self._to_asset_record(model)
+
     def list_run_events(self, run_id: str) -> list[RunEvent]:
         with self._session_factory() as db:
             stmt = select(RunEventModel).where(RunEventModel.run_id == run_id).order_by(RunEventModel.created_at.asc())
@@ -219,6 +231,7 @@ class AzurePostgresMetadataRepository:
                 AssetModel(
                     asset_id=asset.asset_id,
                     run_id=asset.run_id,
+                    session_id=asset.session_id,
                     kind=asset.kind.value,
                     blob_path=asset.blob_path,
                     checksum=asset.checksum,
@@ -232,19 +245,14 @@ class AzurePostgresMetadataRepository:
     def list_assets(self, run_id: str) -> list[AssetRecord]:
         with self._session_factory() as db:
             stmt = select(AssetModel).where(AssetModel.run_id == run_id).order_by(AssetModel.created_at.asc())
-            return [
-                AssetRecord(
-                    asset_id=model.asset_id,
-                    run_id=model.run_id,
-                    kind=AssetKind(model.kind),
-                    blob_path=model.blob_path,
-                    checksum=model.checksum,
-                    mime_type=model.mime_type,
-                    metadata=model.metadata_json,
-                    created_at=model.created_at,
-                )
-                for model in db.scalars(stmt)
-            ]
+            return [self._to_asset_record(model) for model in db.scalars(stmt)]
+
+    def list_session_assets(self, session_id: str, kind: str | None = None) -> list[AssetRecord]:
+        with self._session_factory() as db:
+            stmt = select(AssetModel).where(AssetModel.session_id == session_id).order_by(AssetModel.created_at.asc())
+            if kind is not None:
+                stmt = stmt.where(AssetModel.kind == kind)
+            return [self._to_asset_record(model) for model in db.scalars(stmt)]
 
     def register_metric_definition(self, metric_definition: MetricDefinition) -> MetricDefinition:
         with self._session_factory.begin() as db:
@@ -328,6 +336,20 @@ class AzurePostgresMetadataRepository:
             ],
         }
 
+    def _ensure_local_runtime_validation_columns(self) -> None:
+        if self.engine.dialect.name != "sqlite":
+            return
+        inspector = inspect(self.engine)
+        with self.engine.begin() as connection:
+            if "runs" in inspector.get_table_names():
+                run_columns = {column["name"] for column in inspector.get_columns("runs")}
+                if "input_asset_ids" not in run_columns:
+                    connection.execute(text("ALTER TABLE runs ADD COLUMN input_asset_ids JSON DEFAULT '[]'"))
+            if "assets" in inspector.get_table_names():
+                asset_columns = {column["name"] for column in inspector.get_columns("assets")}
+                if "session_id" not in asset_columns:
+                    connection.execute(text("ALTER TABLE assets ADD COLUMN session_id VARCHAR"))
+
     @staticmethod
     def _to_run_record(model: RunModel) -> RunRecord:
         return RunRecord(
@@ -336,8 +358,23 @@ class AzurePostgresMetadataRepository:
             run_kind=RunKind(model.run_kind),
             status=RunStatus(model.status),
             manifest=ExperimentManifest.model_validate(model.manifest_json),
+            input_asset_ids=model.input_asset_ids_json,
             summary=model.summary_json,
             error=model.error_json,
             created_at=model.created_at,
             updated_at=model.updated_at,
+        )
+
+    @staticmethod
+    def _to_asset_record(model: AssetModel) -> AssetRecord:
+        return AssetRecord(
+            asset_id=model.asset_id,
+            run_id=model.run_id,
+            session_id=model.session_id,
+            kind=AssetKind(model.kind),
+            blob_path=model.blob_path,
+            checksum=model.checksum,
+            mime_type=model.mime_type,
+            metadata=model.metadata_json,
+            created_at=model.created_at,
         )

@@ -30,6 +30,31 @@ The platform centers on these primary resources:
 
 All experiment, metric evaluation, and agent analysis activity is modeled as a run. Azure Blob stores large artifacts. Azure PostgreSQL stores metadata only.
 
+## Runtime Validation
+
+The current runtime slice is intentionally a runtime validation path, not a real CV pipeline.
+
+- `Dummy`: deterministic orchestration-safe computation
+- `Fake`: synthetic keypoints and metrics not derived from a production pose model
+- `Placeholder`: scaffolded worker, UI, or agent bridge that proves the run contract
+
+The validated slice is:
+
+```text
+upload video
+-> create run
+-> enqueue job
+-> worker pipeline
+-> fake metrics output
+-> agent reads result
+```
+
+The dummy pipeline writes:
+
+- `keypoints.json`
+- `metrics.json`
+- `report.json`
+
 ## Local Development
 
 Create and activate a virtual environment:
@@ -77,6 +102,7 @@ See:
 - [docs/agent_architecture.md](/Users/drava/Documents/Hound/hf-playground/docs/agent_architecture.md)
 - [docs/deployment_azure.md](/Users/drava/Documents/Hound/hf-playground/docs/deployment_azure.md)
 - [docs/migration_from_mvp.md](/Users/drava/Documents/Hound/hf-playground/docs/migration_from_mvp.md)
+- [docs/runtime_validation.md](/Users/drava/Documents/Hound/hf-playground/docs/runtime_validation.md)
 
 ## Testing
 

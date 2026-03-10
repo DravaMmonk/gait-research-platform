@@ -23,6 +23,7 @@ The existing `gait_research_platform` package remains available as a legacy rese
 
 ## Next Migration Steps
 
-- move legacy experiment execution behind the new run executor contract
+- move legacy experiment execution behind the new run executor contract after runtime validation is complete
 - replace local storage and queue adapters with Azure Blob and Service Bus bindings
 - expand metric definitions into a richer DSL and clinician review workflow
+- replace the dummy/fake/placeholder runtime validation pipeline with real CV-backed processing

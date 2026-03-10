@@ -29,5 +29,5 @@ Local development uses the same metadata schema and run model. The expected loca
 
 1. run a local PostgreSQL-compatible database or SQLite fallback for development
 2. run the FastAPI service
-3. run the local deterministic worker path
+3. run the placeholder local worker path with `python -m hound_forward.worker.main`
 4. switch only adapter wiring when moving to Azure

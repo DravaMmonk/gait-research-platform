@@ -28,3 +28,27 @@ class LocalArtifactStore:
             checksum=checksum,
             metadata={"storage_backend": "local", "file_name": name},
         )
+
+    def put_bytes(
+        self,
+        *,
+        session_id: str,
+        name: str,
+        content: bytes,
+        kind: str,
+        mime_type: str,
+        metadata: dict | None = None,
+    ) -> AssetRecord:
+        session_dir = self.root / "sessions" / session_id
+        session_dir.mkdir(parents=True, exist_ok=True)
+        path = session_dir / name
+        path.write_bytes(content)
+        checksum = hashlib.sha256(content).hexdigest()
+        return AssetRecord(
+            session_id=session_id,
+            kind=AssetKind(kind),
+            blob_path=str(path),
+            checksum=checksum,
+            mime_type=mime_type,
+            metadata={"storage_backend": "local", "file_name": name, **(metadata or {})},
+        )

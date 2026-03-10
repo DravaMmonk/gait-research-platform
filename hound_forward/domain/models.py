@@ -13,10 +13,10 @@ def utc_now() -> datetime:
 
 
 class RunStatus(StrEnum):
-    PENDING = "pending"
+    CREATED = "created"
     QUEUED = "queued"
     RUNNING = "running"
-    SUCCEEDED = "succeeded"
+    COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
 
@@ -81,6 +81,7 @@ class ExperimentManifest(BaseModel):
     execution_policy: ExecutionPolicy = Field(default_factory=ExecutionPolicy)
     tags: list[str] = Field(default_factory=list)
     goal: str | None = None
+    input_asset_ids: list[str] = Field(default_factory=list)
 
 
 class SessionRecord(BaseModel):
@@ -96,8 +97,9 @@ class RunRecord(BaseModel):
     run_id: str = Field(default_factory=lambda: str(uuid4()))
     session_id: str
     run_kind: RunKind = RunKind.PIPELINE
-    status: RunStatus = RunStatus.PENDING
+    status: RunStatus = RunStatus.CREATED
     manifest: ExperimentManifest
+    input_asset_ids: list[str] = Field(default_factory=list)
     summary: dict[str, Any] = Field(default_factory=dict)
     error: dict[str, Any] | None = None
     created_at: datetime = Field(default_factory=utc_now)
@@ -115,13 +117,50 @@ class RunEvent(BaseModel):
 
 class AssetRecord(BaseModel):
     asset_id: str = Field(default_factory=lambda: str(uuid4()))
-    run_id: str
+    run_id: str | None = None
+    session_id: str | None = None
     kind: AssetKind
     blob_path: str
     checksum: str
     mime_type: str = "application/json"
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=utc_now)
+
+
+class VideoUploadResponse(BaseModel):
+    session_id: str
+    asset: AssetRecord
+    placeholder_flags: dict[str, bool] = Field(
+        default_factory=lambda: {"dummy": True, "fake": True, "placeholder": True}
+    )
+
+
+class MetricReadResponse(BaseModel):
+    run_id: str
+    metric_results: list[MetricResult] = Field(default_factory=list)
+    metrics_asset: AssetRecord | None = None
+    placeholder_flags: dict[str, bool] = Field(
+        default_factory=lambda: {"dummy": True, "fake": True, "placeholder": True}
+    )
+
+
+class RunDetailResponse(BaseModel):
+    run: RunRecord
+    assets: list[AssetRecord] = Field(default_factory=list)
+    metrics: list[MetricResult] = Field(default_factory=list)
+    events: list[RunEvent] = Field(default_factory=list)
+    placeholder_flags: dict[str, bool] = Field(
+        default_factory=lambda: {"dummy": True, "fake": True, "placeholder": True}
+    )
+
+
+class DummyPipelineOutput(BaseModel):
+    keypoints: dict[str, Any]
+    metrics: dict[str, Any]
+    report: dict[str, Any]
+    placeholder_flags: dict[str, bool] = Field(
+        default_factory=lambda: {"dummy": True, "fake": True, "placeholder": True}
+    )
 
 
 class MetricDefinition(BaseModel):

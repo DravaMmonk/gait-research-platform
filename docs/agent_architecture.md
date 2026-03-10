@@ -42,19 +42,17 @@ The agent may not:
 
 The primary tools are:
 
-- `create_session`
 - `create_run`
-- `enqueue_run`
 - `get_run`
 - `list_runs`
-- `get_asset`
-- `list_metrics`
+- `read_metrics`
 - `compare_runs`
-- `create_metric_definition`
-- `evaluate_metric_definition`
-- `search_dataset`
+- `list_session_videos`
+- `enqueue_run`
 
 Each tool returns a structured `ToolResponse` payload so the graph never depends on free-text control flow.
+
+In local runtime validation mode, the graph may wait through a `PlaceholderLocalWorkerBridge`. That bridge is explicitly a placeholder and not a production worker runtime.
 
 ## State Contract
 

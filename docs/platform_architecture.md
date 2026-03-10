@@ -28,7 +28,14 @@ The platform core manages:
 
 ### Compute Pipeline
 
-The pipeline stays deterministic. It ingests manifests and produces structured outputs. Worker execution is queue-driven and artifact-backed.
+The current compute path is a runtime validation slice:
+
+- `DummyRuntimeValidationPipeline`: deterministic fake computation
+- `LocalArtifactStore`: placeholder local storage adapter
+- `InMemoryQueue`: placeholder local queue
+- `PlaceholderLocalWorkerBridge`: placeholder local worker boundary for agent and local testing
+
+The pipeline ingests one uploaded video asset plus a manifest and produces structured fake outputs.
 
 ### Agent Orchestration
 
@@ -43,6 +50,8 @@ The Next.js scaffold reserves routes for:
 - `/metrics`
 - `/datasets`
 - `/agent-lab`
+
+The current UI is a placeholder Run Explorer focused on one uploaded video, one run, and one fake metric output set.
 
 ## Azure Mapping
 
