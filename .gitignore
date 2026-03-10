@@ -4,6 +4,10 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+.env
+.hf/
+frontend/research_console/node_modules/
+frontend/research_console/.next/
 
 gait_research_platform/data/videos/
 gait_research_platform/data/poses/
