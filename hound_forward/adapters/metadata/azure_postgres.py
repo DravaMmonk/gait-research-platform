@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import JSON, DateTime, Float, String, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from hound_forward.domain import (
     AssetKind,
@@ -101,7 +102,12 @@ class AzurePostgresMetadataRepository:
     """Metadata repository aligned to Azure PostgreSQL schema semantics."""
 
     def __init__(self, database_url: str) -> None:
-        self.engine = create_engine(database_url, future=True)
+        engine_kwargs: dict[str, Any] = {"future": True}
+        if database_url.startswith("sqlite"):
+            engine_kwargs["connect_args"] = {"check_same_thread": False}
+            if database_url.endswith(":memory:"):
+                engine_kwargs["poolclass"] = StaticPool
+        self.engine = create_engine(database_url, **engine_kwargs)
         self._session_factory = sessionmaker(self.engine, expire_on_commit=False, class_=Session)
 
     def create_all(self) -> None:

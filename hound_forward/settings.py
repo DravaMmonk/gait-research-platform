@@ -14,7 +14,7 @@ class PlatformSettings(BaseSettings):
     environment: str = "local"
     api_title: str = "Hound Forward Research Platform"
 
-    metadata_database_url: str = "sqlite+pysqlite:///:memory:"
+    metadata_database_url: str = "sqlite+pysqlite:///./.hf/local.db"
     artifact_root: Path = Field(default=Path(".hf/artifacts"))
     azure_blob_account_url: str | None = None
     azure_blob_container: str = "hound-platform"
