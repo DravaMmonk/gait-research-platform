@@ -7,20 +7,32 @@ from uuid import uuid4
 
 from hound_forward.domain import (
     AssetRecord,
+    ExecutionPlan,
+    ExecutionStage,
+    ExecutionStageType,
     ExperimentManifest,
+    FormulaDefinitionRecord,
+    FormulaEvaluationRecord,
+    FormulaProposalRecord,
+    FormulaReviewRecord,
+    FormulaStatus,
     MetricDefinition,
     MetricReadResponse,
     MetricResult,
+    ReviewEvidenceBundle,
+    ReviewVerdict,
     RunDetailResponse,
     RunEvent,
     RunKind,
     RunRecord,
     RunStatus,
     SessionRecord,
+    StageResult,
+    ToolInvocationRecord,
     ToolResponse,
     VideoUploadResponse,
 )
-from hound_forward.ports import ArtifactStore, Job, JobQueue, MetadataRepository, RunExecutor
+from hound_forward.ports import ArtifactStore, Job, JobQueue, MetadataRepository, RunExecutor, ToolRunner
 
 
 def utc_now() -> datetime:
@@ -33,6 +45,7 @@ class ServiceContainer:
     artifact_store: ArtifactStore
     queue: JobQueue
     executor: RunExecutor
+    tool_runner: ToolRunner | None = None
 
 
 class ResearchPlatformService:
@@ -55,7 +68,13 @@ class ResearchPlatformService:
             asset = self.container.metadata.get_asset(asset_id)
             if asset is None or asset.session_id != session_id:
                 raise KeyError(f"Unknown session-scoped input asset: {asset_id}")
-        run = RunRecord(session_id=session_id, run_kind=run_kind, manifest=manifest, input_asset_ids=list(manifest.input_asset_ids))
+        run = RunRecord(
+            session_id=session_id,
+            run_kind=run_kind,
+            manifest=manifest,
+            input_asset_ids=list(manifest.input_asset_ids),
+            execution_plan=self._build_default_execution_plan(run_kind=run_kind, manifest=manifest),
+        )
         saved = self.container.metadata.create_run(run)
         self.container.metadata.append_run_event(
             RunEvent(run_id=saved.run_id, status=RunStatus.CREATED, message="Run created.", payload={"manifest_id": manifest.id})
@@ -118,6 +137,7 @@ class ResearchPlatformService:
             run.status = RunStatus.COMPLETED
             run.summary = summary
             run.error = None
+            run.stage_results = self._build_stage_results(run=run, assets=assets, summary=summary)
             run.updated_at = utc_now()
             self.container.metadata.update_run(run)
             for asset in assets:
@@ -174,6 +194,99 @@ class ResearchPlatformService:
             config_schema=config_schema or {},
         )
         return self.container.metadata.register_metric_definition(definition)
+
+    def create_formula_definition(
+        self,
+        *,
+        name: str,
+        version: str,
+        description: str,
+        input_requirements: dict[str, Any] | None = None,
+        execution_spec: dict[str, Any] | None = None,
+        status: FormulaStatus = FormulaStatus.DRAFT,
+    ) -> FormulaDefinitionRecord:
+        record = FormulaDefinitionRecord(
+            name=name,
+            version=version,
+            status=status,
+            description=description,
+            input_requirements=input_requirements or {},
+            execution_spec=execution_spec or {},
+        )
+        return self.container.metadata.create_formula_definition(record)
+
+    def list_formula_definitions(self) -> list[FormulaDefinitionRecord]:
+        return self.container.metadata.list_formula_definitions()
+
+    def get_formula_definition(self, formula_definition_id: str) -> FormulaDefinitionRecord:
+        record = self.container.metadata.get_formula_definition(formula_definition_id)
+        if record is None:
+            raise KeyError(f"Unknown formula_definition_id: {formula_definition_id}")
+        return record
+
+    def create_formula_proposal(
+        self,
+        *,
+        research_question: str,
+        proposal_payload: dict[str, Any],
+        formula_definition_id: str | None = None,
+        source_run_id: str | None = None,
+    ) -> FormulaProposalRecord:
+        record = FormulaProposalRecord(
+            formula_definition_id=formula_definition_id,
+            source_run_id=source_run_id,
+            research_question=research_question,
+            proposal_payload=proposal_payload,
+        )
+        return self.container.metadata.create_formula_proposal(record)
+
+    def list_formula_proposals(self, formula_definition_id: str | None = None) -> list[FormulaProposalRecord]:
+        return self.container.metadata.list_formula_proposals(formula_definition_id=formula_definition_id)
+
+    def create_formula_evaluation(
+        self,
+        *,
+        formula_definition_id: str,
+        run_id: str,
+        dataset_ref: str | None = None,
+        summary: dict[str, Any] | None = None,
+    ) -> FormulaEvaluationRecord:
+        self.get_formula_definition(formula_definition_id)
+        self.get_run(run_id)
+        record = FormulaEvaluationRecord(
+            formula_definition_id=formula_definition_id,
+            run_id=run_id,
+            dataset_ref=dataset_ref,
+            summary=summary or {},
+        )
+        return self.container.metadata.create_formula_evaluation(record)
+
+    def list_formula_evaluations(self, formula_definition_id: str | None = None) -> list[FormulaEvaluationRecord]:
+        return self.container.metadata.list_formula_evaluations(formula_definition_id=formula_definition_id)
+
+    def create_formula_review(
+        self,
+        *,
+        formula_definition_id: str,
+        reviewer_id: str,
+        verdict: ReviewVerdict,
+        notes: str,
+        formula_evaluation_id: str | None = None,
+        evidence_bundle: ReviewEvidenceBundle | None = None,
+    ) -> FormulaReviewRecord:
+        self.get_formula_definition(formula_definition_id)
+        record = FormulaReviewRecord(
+            formula_definition_id=formula_definition_id,
+            formula_evaluation_id=formula_evaluation_id,
+            reviewer_id=reviewer_id,
+            verdict=verdict,
+            notes=notes,
+            evidence_bundle=evidence_bundle or ReviewEvidenceBundle(),
+        )
+        return self.container.metadata.create_formula_review(record)
+
+    def list_formula_reviews(self, formula_definition_id: str | None = None) -> list[FormulaReviewRecord]:
+        return self.container.metadata.list_formula_reviews(formula_definition_id=formula_definition_id)
 
     def list_metric_definitions(self) -> list[MetricDefinition]:
         return self.container.metadata.list_metric_definitions()
@@ -258,3 +371,51 @@ class ResearchPlatformService:
             if run.status == RunStatus.QUEUED:
                 return run
         return None
+
+    @staticmethod
+    def _build_default_execution_plan(run_kind: RunKind, manifest: ExperimentManifest) -> ExecutionPlan:
+        if run_kind == RunKind.FORMULA_EVALUATION:
+            stages = [
+                ExecutionStage(
+                    name="decode_video",
+                    stage_type=ExecutionStageType.RESEARCH_TOOL,
+                    tool_invocation=ToolInvocationRecord(
+                        tool_name="decode_video",
+                        input_asset_id=manifest.input_asset_ids[0] if manifest.input_asset_ids else None,
+                        output_name="decode_video.json",
+                        artifact_kind="report",
+                    ),
+                ),
+                ExecutionStage(
+                    name="formula_evaluation_placeholder",
+                    stage_type=ExecutionStageType.FORMULA_EVALUATOR,
+                    metadata={"mode": "scaffold"},
+                ),
+            ]
+        else:
+            stages = [
+                ExecutionStage(name="load_video_asset", stage_type=ExecutionStageType.PLACEHOLDER_PIPELINE),
+                ExecutionStage(name="generate_fake_keypoints", stage_type=ExecutionStageType.PLACEHOLDER_PIPELINE),
+                ExecutionStage(name="compute_fake_metrics", stage_type=ExecutionStageType.PLACEHOLDER_PIPELINE),
+                ExecutionStage(name="generate_report", stage_type=ExecutionStageType.PLACEHOLDER_PIPELINE),
+            ]
+        return ExecutionPlan(stages=stages)
+
+    @staticmethod
+    def _build_stage_results(run: RunRecord, assets: list[AssetRecord], summary: dict[str, Any]) -> list[StageResult]:
+        asset_ids = [asset.asset_id for asset in assets]
+        if not run.execution_plan:
+            return []
+        stage_results: list[StageResult] = []
+        for index, stage in enumerate(run.execution_plan.stages):
+            produced = asset_ids if index == len(run.execution_plan.stages) - 1 else []
+            stage_results.append(
+                StageResult(
+                    stage_id=stage.stage_id,
+                    name=stage.name,
+                    status=RunStatus.COMPLETED,
+                    produced_asset_ids=produced,
+                    summary={"run_id": run.run_id, **summary},
+                )
+            )
+        return stage_results

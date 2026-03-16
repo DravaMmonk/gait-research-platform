@@ -8,13 +8,14 @@ from fastapi.testclient import TestClient
 from hound_forward.adapters.metadata.azure_postgres import AzurePostgresMetadataRepository
 from hound_forward.adapters.queue.in_memory import InMemoryJobQueue
 from hound_forward.adapters.storage.local import LocalArtifactStore
+from hound_forward.adapters.tool_runner import LocalResearchToolRunner
 from hound_forward.agent_system.graphs.research_graph import ResearchGraph
 from hound_forward.agent_system.planners.experiment_planner import ExperimentManifestPlanner
 from hound_forward.agent_system.tools.registry import ToolRegistry
 from hound_forward.api.app import create_app
 from hound_forward.application import ResearchPlatformService, ServiceContainer
-from hound_forward.domain import RunStatus
-from hound_forward.pipeline import DummyRuntimeValidationPipeline
+from hound_forward.domain import FormulaStatus, ReviewVerdict, RunKind, RunStatus
+from hound_forward.pipeline import DummyRuntimeValidationPipeline, PlatformRunExecutor
 from hound_forward.worker.runtime import PlaceholderLocalWorkerBridge
 
 
@@ -23,8 +24,12 @@ def build_service(tmp_path: Path) -> ResearchPlatformService:
     metadata.create_all()
     artifact_store = LocalArtifactStore(tmp_path / "artifacts")
     queue = InMemoryJobQueue()
-    executor = DummyRuntimeValidationPipeline(artifact_store=artifact_store, metadata=metadata)
-    return ResearchPlatformService(ServiceContainer(metadata=metadata, artifact_store=artifact_store, queue=queue, executor=executor))
+    tool_runner = LocalResearchToolRunner(artifact_store=artifact_store, work_root=tmp_path / "tool_runs")
+    dummy_pipeline = DummyRuntimeValidationPipeline(artifact_store=artifact_store, metadata=metadata)
+    executor = PlatformRunExecutor(dummy_pipeline=dummy_pipeline, tool_runner=tool_runner)
+    return ResearchPlatformService(
+        ServiceContainer(metadata=metadata, artifact_store=artifact_store, queue=queue, executor=executor, tool_runner=tool_runner)
+    )
 
 
 def upload_video(service: ResearchPlatformService, session_id: str, name: str = "sample.mp4", content: bytes | None = None):
@@ -109,6 +114,94 @@ def test_agent_vertical_slice_requires_uploaded_video_and_mentions_dummy_pipelin
     assert any(event.status == RunStatus.COMPLETED for event in detail.events)
 
 
+def test_formula_infrastructure_round_trips_records(tmp_path: Path, monkeypatch) -> None:
+    service = build_service(tmp_path)
+    monkeypatch.setattr(
+        "research_tools.video.decode_video._probe_video",
+        lambda path: {
+            "fps": 24.0,
+            "frame_count": 12,
+            "duration_seconds": 0.5,
+            "width": 320,
+            "height": 240,
+            "codec": "h264",
+        },
+    )
+    formula = service.create_formula_definition(
+        name="stride_symmetry_formula",
+        version="v1",
+        description="Scaffold formula definition for infrastructure validation.",
+        input_requirements={"signals": ["stride_length"]},
+        execution_spec={"mode": "dsl_scaffold"},
+        status=FormulaStatus.PROPOSED,
+    )
+    proposal = service.create_formula_proposal(
+        research_question="Can we normalize stride asymmetry?",
+        proposal_payload={"expression": "abs(left-right)/mean(left,right)"},
+        formula_definition_id=formula.formula_definition_id,
+    )
+    session = service.create_session(title="Formula evaluation session")
+    video = upload_video(service, session.session_id)
+    manifest = ExperimentManifestPlanner().plan("Formula evaluation infrastructure", dataset_video_ids=["video-001"])
+    manifest.input_asset_ids = [video.asset.asset_id]
+    run = service.create_run(session.session_id, manifest, run_kind=RunKind.FORMULA_EVALUATION)
+    service.enqueue_run(run.run_id)
+    worker = PlaceholderLocalWorkerBridge(service=service)
+    completed = worker.drain_once()
+    assert completed is not None
+    assert completed.status == RunStatus.COMPLETED
+
+    evaluation = service.create_formula_evaluation(
+        formula_definition_id=formula.formula_definition_id,
+        run_id=run.run_id,
+        dataset_ref="baseline-cohort",
+        summary={"stage": "scaffold"},
+    )
+    review = service.create_formula_review(
+        formula_definition_id=formula.formula_definition_id,
+        formula_evaluation_id=evaluation.formula_evaluation_id,
+        reviewer_id="researcher-001",
+        verdict=ReviewVerdict.NEEDS_REVISION,
+        notes="Execution substrate is ready; business logic remains scaffolded.",
+    )
+
+    assert service.get_formula_definition(formula.formula_definition_id).status == FormulaStatus.PROPOSED
+    assert service.list_formula_proposals(formula.formula_definition_id)[0].formula_proposal_id == proposal.formula_proposal_id
+    assert service.list_formula_evaluations(formula.formula_definition_id)[0].run_id == run.run_id
+    assert service.list_formula_reviews(formula.formula_definition_id)[0].reviewer_id == "researcher-001"
+    detail = service.get_run_detail(run.run_id)
+    assert detail.run.run_kind == RunKind.FORMULA_EVALUATION
+    assert detail.run.execution_plan is not None
+    assert any(asset.metadata.get("tool_name") == "decode_video" for asset in detail.assets)
+
+
+def test_tool_runner_invokes_research_tool_and_registers_artifact(tmp_path: Path, monkeypatch) -> None:
+    service = build_service(tmp_path)
+    session = service.create_session(title="Tool runner session")
+    uploaded = upload_video(service, session.session_id, content=b"video-binary")
+    monkeypatch.setattr(
+        "research_tools.video.decode_video._probe_video",
+        lambda path: {
+            "fps": 24.0,
+            "frame_count": 12,
+            "duration_seconds": 0.5,
+            "width": 320,
+            "height": 240,
+            "codec": "h264",
+        },
+    )
+
+    result, asset = service.container.tool_runner.invoke(
+        tool_name="decode_video",
+        input_asset=uploaded.asset,
+        run_id="tool-runner-run",
+        config=None,
+    )
+    assert result["tool"] == "decode_video"
+    assert asset.kind.value == "report"
+    assert asset.metadata["tool_name"] == "decode_video"
+
+
 def test_api_surface_supports_video_upload_run_detail_and_agent_execution(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'api.db'}")
     monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "api-artifacts"))
@@ -159,3 +252,53 @@ def test_api_surface_supports_video_upload_run_detail_and_agent_execution(tmp_pa
     assert agent_response.status_code == 200
     assert agent_response.json()["run_status"] == "completed"
     assert "Dummy runtime validation result" in agent_response.json()["recommendation"]
+
+
+def test_api_surface_supports_formula_scaffold_endpoints(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'formula-api.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "formula-api-artifacts"))
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_graph.cache_clear()
+    client = TestClient(create_app())
+
+    formula_response = client.post(
+        "/formulas/definitions",
+        json={
+            "name": "asymmetry_formula",
+            "version": "v1",
+            "description": "Infrastructure scaffold formula.",
+            "input_requirements": {"signals": ["asymmetry_index"]},
+            "execution_spec": {"mode": "dsl_scaffold"},
+            "status": "proposed",
+        },
+    )
+    assert formula_response.status_code == 200
+    formula = formula_response.json()
+
+    proposal_response = client.post(
+        "/formulas/proposals",
+        json={
+            "research_question": "Can AI propose a symmetry formula?",
+            "proposal_payload": {"expression": "abs(left-right)/mean(left,right)"},
+            "formula_definition_id": formula["formula_definition_id"],
+        },
+    )
+    assert proposal_response.status_code == 200
+
+    review_response = client.post(
+        "/formulas/reviews",
+        json={
+            "formula_definition_id": formula["formula_definition_id"],
+            "reviewer_id": "researcher-001",
+            "verdict": "needs_revision",
+            "notes": "Scaffold review.",
+            "evidence_bundle": {"asset_ids": [], "metric_result_ids": []},
+        },
+    )
+    assert review_response.status_code == 200
+
+    assert client.get("/formulas/definitions").status_code == 200
+    assert client.get("/formulas/proposals").status_code == 200
+    assert client.get("/formulas/reviews").status_code == 200

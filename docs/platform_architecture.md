@@ -25,6 +25,10 @@ The platform core manages:
 - metric definitions
 - metric results
 - run events
+- formula definitions
+- formula proposals
+- formula evaluations
+- formula reviews
 
 ### Compute Pipeline
 
@@ -36,6 +40,14 @@ The current compute path is a runtime validation slice:
 - `PlaceholderLocalWorkerBridge`: placeholder local worker boundary for agent and local testing
 
 The pipeline ingests one uploaded video asset plus a manifest and produces structured fake outputs.
+
+The next infrastructure layer adds a staged execution substrate:
+
+- placeholder runtime validation stages
+- research tool stages
+- future formula evaluator stages
+
+This keeps compute orchestration in one runtime model instead of spawning a separate formula execution system.
 
 ### Agent Orchestration
 
@@ -61,3 +73,14 @@ The current UI is a placeholder Run Explorer focused on one uploaded video, one 
 - Azure Container Apps: API and agent services
 - Azure Container Apps Jobs / GPU VM: workers
 - Azure Monitor: logs and run observability
+
+## Formula Preparedness
+
+The platform is now prepared to host:
+
+- formula registry metadata
+- formula proposal storage
+- formula evaluation runs
+- human review records
+
+but it still does not claim formula business completeness.

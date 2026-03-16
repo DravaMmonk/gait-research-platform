@@ -50,3 +50,5 @@ Replace the dummy pipeline step-by-step:
 2. replace fake metric generation with real metric engine execution
 3. replace the placeholder local worker bridge with an actual worker runtime
 4. keep the same run, asset, metric, and tool contracts during the transition
+
+The new formula infrastructure should build on the same run and staged execution substrate rather than bypassing it.

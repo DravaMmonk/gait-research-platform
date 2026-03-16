@@ -22,6 +22,9 @@ The application expects environment-driven settings:
 - `HF_AZURE_SERVICE_BUS_NAMESPACE`
 - `HF_AZURE_SERVICE_BUS_QUEUE`
 - `HF_DEFAULT_RUNNER`
+- `HF_PLACEHOLDER_WORKER_MODE`
+- `HF_RESEARCH_TOOL_EXECUTION_MODE`
+- `HF_FORMULA_EVALUATION_MODE`
 
 ## Local Parity
 
@@ -31,3 +34,7 @@ Local development uses the same metadata schema and run model. The expected loca
 2. run the FastAPI service
 3. run the placeholder local worker path with `python -m hound_forward.worker.main`
 4. switch only adapter wiring when moving to Azure
+
+## Infrastructure Status
+
+Azure infrastructure remains a scaffold. The platform now has stronger application-layer infrastructure for formula lifecycle storage and staged execution, but Azure deployment still targets the existing API, agent, and worker service shape.

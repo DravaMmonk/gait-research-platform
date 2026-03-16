@@ -12,13 +12,22 @@ from hound_forward.domain import (
     AssetKind,
     AssetRecord,
     ExperimentManifest,
+    ExecutionPlan,
+    FormulaDefinitionRecord,
+    FormulaEvaluationRecord,
+    FormulaProposalRecord,
+    FormulaReviewRecord,
+    FormulaStatus,
     MetricDefinition,
     MetricResult,
+    ReviewEvidenceBundle,
+    ReviewVerdict,
     RunEvent,
     RunKind,
     RunRecord,
     RunStatus,
     SessionRecord,
+    StageResult,
 )
 
 
@@ -46,6 +55,8 @@ class RunModel(Base):
     status: Mapped[str] = mapped_column(String, index=True)
     manifest_json: Mapped[dict[str, Any]] = mapped_column("manifest", JSON)
     input_asset_ids_json: Mapped[list[str]] = mapped_column("input_asset_ids", JSON, default=list)
+    execution_plan_json: Mapped[dict[str, Any] | None] = mapped_column("execution_plan", JSON, nullable=True)
+    stage_results_json: Mapped[list[dict[str, Any]]] = mapped_column("stage_results", JSON, default=list)
     summary_json: Mapped[dict[str, Any]] = mapped_column("summary", JSON, default=dict)
     error_json: Mapped[dict[str, Any] | None] = mapped_column("error", JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
@@ -98,6 +109,58 @@ class MetricResultModel(Base):
     version: Mapped[str] = mapped_column(String)
     value: Mapped[float] = mapped_column(Float)
     payload_json: Mapped[dict[str, Any]] = mapped_column("payload", JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class FormulaDefinitionModel(Base):
+    __tablename__ = "formula_definitions"
+
+    formula_definition_id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, index=True)
+    version: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, index=True)
+    description: Mapped[str] = mapped_column(String)
+    input_requirements_json: Mapped[dict[str, Any]] = mapped_column("input_requirements", JSON, default=dict)
+    execution_spec_json: Mapped[dict[str, Any]] = mapped_column("execution_spec", JSON, default=dict)
+    provenance_json: Mapped[dict[str, Any]] = mapped_column("provenance", JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class FormulaProposalModel(Base):
+    __tablename__ = "formula_proposals"
+
+    formula_proposal_id: Mapped[str] = mapped_column(String, primary_key=True)
+    formula_definition_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    source_run_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    research_question: Mapped[str] = mapped_column(String)
+    proposal_payload_json: Mapped[dict[str, Any]] = mapped_column("proposal_payload", JSON, default=dict)
+    provenance_json: Mapped[dict[str, Any]] = mapped_column("provenance", JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class FormulaEvaluationModel(Base):
+    __tablename__ = "formula_evaluations"
+
+    formula_evaluation_id: Mapped[str] = mapped_column(String, primary_key=True)
+    formula_definition_id: Mapped[str] = mapped_column(String, index=True)
+    run_id: Mapped[str] = mapped_column(String, index=True)
+    dataset_ref: Mapped[str | None] = mapped_column(String, nullable=True)
+    summary_json: Mapped[dict[str, Any]] = mapped_column("summary", JSON, default=dict)
+    provenance_json: Mapped[dict[str, Any]] = mapped_column("provenance", JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class FormulaReviewModel(Base):
+    __tablename__ = "formula_reviews"
+
+    formula_review_id: Mapped[str] = mapped_column(String, primary_key=True)
+    formula_definition_id: Mapped[str] = mapped_column(String, index=True)
+    formula_evaluation_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    reviewer_id: Mapped[str] = mapped_column(String)
+    verdict: Mapped[str] = mapped_column(String, index=True)
+    notes: Mapped[str] = mapped_column(String)
+    evidence_bundle_json: Mapped[dict[str, Any]] = mapped_column("evidence_bundle", JSON, default=dict)
+    provenance_json: Mapped[dict[str, Any]] = mapped_column("provenance", JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -156,6 +219,8 @@ class AzurePostgresMetadataRepository:
                     status=run.status.value,
                     manifest_json=run.manifest.model_dump(mode="json"),
                     input_asset_ids_json=run.input_asset_ids,
+                    execution_plan_json=run.execution_plan.model_dump(mode="json") if run.execution_plan else None,
+                    stage_results_json=[item.model_dump(mode="json") for item in run.stage_results],
                     summary_json=run.summary,
                     error_json=run.error,
                     created_at=run.created_at,
@@ -175,6 +240,8 @@ class AzurePostgresMetadataRepository:
             model.updated_at = run.updated_at
             model.manifest_json = run.manifest.model_dump(mode="json")
             model.input_asset_ids_json = run.input_asset_ids
+            model.execution_plan_json = run.execution_plan.model_dump(mode="json") if run.execution_plan else None
+            model.stage_results_json = [item.model_dump(mode="json") for item in run.stage_results]
         return run
 
     def get_run(self, run_id: str) -> RunRecord | None:
@@ -320,6 +387,117 @@ class AzurePostgresMetadataRepository:
                 for model in db.scalars(stmt)
             ]
 
+    def create_formula_definition(self, formula_definition: FormulaDefinitionRecord) -> FormulaDefinitionRecord:
+        with self._session_factory.begin() as db:
+            db.add(
+                FormulaDefinitionModel(
+                    formula_definition_id=formula_definition.formula_definition_id,
+                    name=formula_definition.name,
+                    version=formula_definition.version,
+                    status=formula_definition.status.value,
+                    description=formula_definition.description,
+                    input_requirements_json=formula_definition.input_requirements,
+                    execution_spec_json=formula_definition.execution_spec,
+                    provenance_json=formula_definition.provenance,
+                    created_at=formula_definition.created_at,
+                )
+            )
+        return formula_definition
+
+    def get_formula_definition(self, formula_definition_id: str) -> FormulaDefinitionRecord | None:
+        with self._session_factory() as db:
+            model = db.get(FormulaDefinitionModel, formula_definition_id)
+            if model is None:
+                return None
+            return self._to_formula_definition(model)
+
+    def list_formula_definitions(self) -> list[FormulaDefinitionRecord]:
+        with self._session_factory() as db:
+            stmt = select(FormulaDefinitionModel).order_by(FormulaDefinitionModel.created_at.desc())
+            return [self._to_formula_definition(model) for model in db.scalars(stmt)]
+
+    def create_formula_proposal(self, proposal: FormulaProposalRecord) -> FormulaProposalRecord:
+        with self._session_factory.begin() as db:
+            db.add(
+                FormulaProposalModel(
+                    formula_proposal_id=proposal.formula_proposal_id,
+                    formula_definition_id=proposal.formula_definition_id,
+                    source_run_id=proposal.source_run_id,
+                    research_question=proposal.research_question,
+                    proposal_payload_json=proposal.proposal_payload,
+                    provenance_json=proposal.provenance,
+                    created_at=proposal.created_at,
+                )
+            )
+        return proposal
+
+    def get_formula_proposal(self, formula_proposal_id: str) -> FormulaProposalRecord | None:
+        with self._session_factory() as db:
+            model = db.get(FormulaProposalModel, formula_proposal_id)
+            if model is None:
+                return None
+            return self._to_formula_proposal(model)
+
+    def list_formula_proposals(self, formula_definition_id: str | None = None) -> list[FormulaProposalRecord]:
+        with self._session_factory() as db:
+            stmt = select(FormulaProposalModel).order_by(FormulaProposalModel.created_at.desc())
+            if formula_definition_id is not None:
+                stmt = stmt.where(FormulaProposalModel.formula_definition_id == formula_definition_id)
+            return [self._to_formula_proposal(model) for model in db.scalars(stmt)]
+
+    def create_formula_evaluation(self, evaluation: FormulaEvaluationRecord) -> FormulaEvaluationRecord:
+        with self._session_factory.begin() as db:
+            db.add(
+                FormulaEvaluationModel(
+                    formula_evaluation_id=evaluation.formula_evaluation_id,
+                    formula_definition_id=evaluation.formula_definition_id,
+                    run_id=evaluation.run_id,
+                    dataset_ref=evaluation.dataset_ref,
+                    summary_json=evaluation.summary,
+                    provenance_json=evaluation.provenance,
+                    created_at=evaluation.created_at,
+                )
+            )
+        return evaluation
+
+    def get_formula_evaluation(self, formula_evaluation_id: str) -> FormulaEvaluationRecord | None:
+        with self._session_factory() as db:
+            model = db.get(FormulaEvaluationModel, formula_evaluation_id)
+            if model is None:
+                return None
+            return self._to_formula_evaluation(model)
+
+    def list_formula_evaluations(self, formula_definition_id: str | None = None) -> list[FormulaEvaluationRecord]:
+        with self._session_factory() as db:
+            stmt = select(FormulaEvaluationModel).order_by(FormulaEvaluationModel.created_at.desc())
+            if formula_definition_id is not None:
+                stmt = stmt.where(FormulaEvaluationModel.formula_definition_id == formula_definition_id)
+            return [self._to_formula_evaluation(model) for model in db.scalars(stmt)]
+
+    def create_formula_review(self, review: FormulaReviewRecord) -> FormulaReviewRecord:
+        with self._session_factory.begin() as db:
+            db.add(
+                FormulaReviewModel(
+                    formula_review_id=review.formula_review_id,
+                    formula_definition_id=review.formula_definition_id,
+                    formula_evaluation_id=review.formula_evaluation_id,
+                    reviewer_id=review.reviewer_id,
+                    verdict=review.verdict.value,
+                    notes=review.notes,
+                    evidence_bundle_json=review.evidence_bundle.model_dump(mode="json"),
+                    provenance_json=review.provenance,
+                    created_at=review.created_at,
+                )
+            )
+        return review
+
+    def list_formula_reviews(self, formula_definition_id: str | None = None) -> list[FormulaReviewRecord]:
+        with self._session_factory() as db:
+            stmt = select(FormulaReviewModel).order_by(FormulaReviewModel.created_at.desc())
+            if formula_definition_id is not None:
+                stmt = stmt.where(FormulaReviewModel.formula_definition_id == formula_definition_id)
+            return [self._to_formula_review(model) for model in db.scalars(stmt)]
+
     def compare_runs(self, left_run_id: str, right_run_id: str) -> dict[str, Any]:
         left = {item.name: item.value for item in self.list_metric_results(run_id=left_run_id)}
         right = {item.name: item.value for item in self.list_metric_results(run_id=right_run_id)}
@@ -347,6 +525,10 @@ class AzurePostgresMetadataRepository:
                 run_columns = {column["name"] for column in inspector.get_columns("runs")}
                 if "input_asset_ids" not in run_columns:
                     connection.execute(text("ALTER TABLE runs ADD COLUMN input_asset_ids JSON DEFAULT '[]'"))
+                if "execution_plan" not in run_columns:
+                    connection.execute(text("ALTER TABLE runs ADD COLUMN execution_plan JSON"))
+                if "stage_results" not in run_columns:
+                    connection.execute(text("ALTER TABLE runs ADD COLUMN stage_results JSON DEFAULT '[]'"))
             if "assets" in inspector.get_table_names():
                 asset_columns = {column["name"] for column in inspector.get_columns("assets")}
                 if "session_id" not in asset_columns:
@@ -377,6 +559,8 @@ class AzurePostgresMetadataRepository:
             status=RunStatus(model.status),
             manifest=ExperimentManifest.model_validate(model.manifest_json),
             input_asset_ids=model.input_asset_ids_json,
+            execution_plan=ExecutionPlan.model_validate(model.execution_plan_json) if model.execution_plan_json else None,
+            stage_results=[StageResult.model_validate(item) for item in model.stage_results_json],
             summary=model.summary_json,
             error=model.error_json,
             created_at=model.created_at,
@@ -394,5 +578,57 @@ class AzurePostgresMetadataRepository:
             checksum=model.checksum,
             mime_type=model.mime_type,
             metadata=model.metadata_json,
+            created_at=model.created_at,
+        )
+
+    @staticmethod
+    def _to_formula_definition(model: FormulaDefinitionModel) -> FormulaDefinitionRecord:
+        return FormulaDefinitionRecord(
+            formula_definition_id=model.formula_definition_id,
+            name=model.name,
+            version=model.version,
+            status=FormulaStatus(model.status),
+            description=model.description,
+            input_requirements=model.input_requirements_json,
+            execution_spec=model.execution_spec_json,
+            provenance=model.provenance_json,
+            created_at=model.created_at,
+        )
+
+    @staticmethod
+    def _to_formula_proposal(model: FormulaProposalModel) -> FormulaProposalRecord:
+        return FormulaProposalRecord(
+            formula_proposal_id=model.formula_proposal_id,
+            formula_definition_id=model.formula_definition_id,
+            source_run_id=model.source_run_id,
+            research_question=model.research_question,
+            proposal_payload=model.proposal_payload_json,
+            provenance=model.provenance_json,
+            created_at=model.created_at,
+        )
+
+    @staticmethod
+    def _to_formula_evaluation(model: FormulaEvaluationModel) -> FormulaEvaluationRecord:
+        return FormulaEvaluationRecord(
+            formula_evaluation_id=model.formula_evaluation_id,
+            formula_definition_id=model.formula_definition_id,
+            run_id=model.run_id,
+            dataset_ref=model.dataset_ref,
+            summary=model.summary_json,
+            provenance=model.provenance_json,
+            created_at=model.created_at,
+        )
+
+    @staticmethod
+    def _to_formula_review(model: FormulaReviewModel) -> FormulaReviewRecord:
+        return FormulaReviewRecord(
+            formula_review_id=model.formula_review_id,
+            formula_definition_id=model.formula_definition_id,
+            formula_evaluation_id=model.formula_evaluation_id,
+            reviewer_id=model.reviewer_id,
+            verdict=ReviewVerdict(model.verdict),
+            notes=model.notes,
+            evidence_bundle=ReviewEvidenceBundle.model_validate(model.evidence_bundle_json),
+            provenance=model.provenance_json,
             created_at=model.created_at,
         )

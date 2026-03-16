@@ -16,6 +16,7 @@ Hound Forward is now structured as an Azure-aligned, AI-native research platform
 - `infra/azure/`: Bicep scaffold for Azure infrastructure
 - `frontend/research_console/`: Next.js research UI scaffold
 - `docs/`: platform architecture, agent architecture, deployment, and migration notes
+- `research_tools/`: platform-approved compute toolkit boundary exposed from `gait_research_platform/research_tools/`
 
 ## Core Model
 
@@ -54,6 +55,17 @@ The dummy pipeline writes:
 - `keypoints.json`
 - `metrics.json`
 - `report.json`
+
+## Formula Infrastructure
+
+The repository now includes infrastructure seams for a future formula factory without implementing formula business logic yet.
+
+- `formula_definitions`, `formula_proposals`, `formula_evaluations`, and `formula_reviews` are scaffolded as metadata records
+- formula-related runs are supported through dedicated `RunKind` values
+- worker execution is prepared for staged execution plans
+- `research_tools` is the approved compute-tool boundary for future formula and metric evaluations
+
+This stage prepares storage, execution, and review infrastructure. It does not implement formula DSL execution or clinician workflow logic yet.
 
 ## Local Development
 
@@ -103,6 +115,7 @@ See:
 - [docs/deployment_azure.md](/Users/drava/Documents/Hound/hf-playground/docs/deployment_azure.md)
 - [docs/migration_from_mvp.md](/Users/drava/Documents/Hound/hf-playground/docs/migration_from_mvp.md)
 - [docs/runtime_validation.md](/Users/drava/Documents/Hound/hf-playground/docs/runtime_validation.md)
+- [docs/formula_infrastructure.md](/Users/drava/Documents/Hound/hf-playground/docs/formula_infrastructure.md)
 
 ## Testing
 

@@ -35,4 +35,4 @@ umap = ["umap-learn>=0.5.5"]
 video = ["decord>=0.6.0", "opencv-python>=4.9"]
 
 [tool.setuptools.packages.find]
-include = ["gait_research_platform*"]
+include = ["gait_research_platform*", "research_tools*"]

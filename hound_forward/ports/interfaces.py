@@ -4,7 +4,19 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-from hound_forward.domain import AssetRecord, MetricDefinition, MetricResult, RunEvent, RunRecord, RunStatus, SessionRecord
+from hound_forward.domain import (
+    AssetRecord,
+    FormulaDefinitionRecord,
+    FormulaEvaluationRecord,
+    FormulaProposalRecord,
+    FormulaReviewRecord,
+    MetricDefinition,
+    MetricResult,
+    RunEvent,
+    RunRecord,
+    RunStatus,
+    SessionRecord,
+)
 
 
 @dataclass
@@ -63,6 +75,39 @@ class MetadataRepository(ABC):
     @abstractmethod
     def list_metric_results(self, run_id: str | None = None) -> list[MetricResult]: ...
 
+    @abstractmethod
+    def create_formula_definition(self, formula_definition: FormulaDefinitionRecord) -> FormulaDefinitionRecord: ...
+
+    @abstractmethod
+    def get_formula_definition(self, formula_definition_id: str) -> FormulaDefinitionRecord | None: ...
+
+    @abstractmethod
+    def list_formula_definitions(self) -> list[FormulaDefinitionRecord]: ...
+
+    @abstractmethod
+    def create_formula_proposal(self, proposal: FormulaProposalRecord) -> FormulaProposalRecord: ...
+
+    @abstractmethod
+    def get_formula_proposal(self, formula_proposal_id: str) -> FormulaProposalRecord | None: ...
+
+    @abstractmethod
+    def list_formula_proposals(self, formula_definition_id: str | None = None) -> list[FormulaProposalRecord]: ...
+
+    @abstractmethod
+    def create_formula_evaluation(self, evaluation: FormulaEvaluationRecord) -> FormulaEvaluationRecord: ...
+
+    @abstractmethod
+    def get_formula_evaluation(self, formula_evaluation_id: str) -> FormulaEvaluationRecord | None: ...
+
+    @abstractmethod
+    def list_formula_evaluations(self, formula_definition_id: str | None = None) -> list[FormulaEvaluationRecord]: ...
+
+    @abstractmethod
+    def create_formula_review(self, review: FormulaReviewRecord) -> FormulaReviewRecord: ...
+
+    @abstractmethod
+    def list_formula_reviews(self, formula_definition_id: str | None = None) -> list[FormulaReviewRecord]: ...
+
     def compare_runs(self, left_run_id: str, right_run_id: str) -> dict[str, Any]:
         left = {item.name: item.value for item in self.list_metric_results(left_run_id)}
         right = {item.name: item.value for item in self.list_metric_results(right_run_id)}
@@ -110,3 +155,15 @@ class JobQueue(ABC):
 class RunExecutor(ABC):
     @abstractmethod
     def execute(self, run: RunRecord) -> tuple[dict[str, Any], list[AssetRecord], list[MetricResult]]: ...
+
+
+class ToolRunner(ABC):
+    @abstractmethod
+    def invoke(
+        self,
+        *,
+        tool_name: str,
+        input_asset: AssetRecord,
+        run_id: str,
+        config: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], AssetRecord]: ...
