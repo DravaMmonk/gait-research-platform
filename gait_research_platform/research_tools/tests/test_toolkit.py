@@ -11,6 +11,7 @@ from research_tools.gait.detect_direction import detect_direction
 from research_tools.gait.segment_sections import segment_sections
 from research_tools.pose.extract_keypoints import extract_keypoints
 from research_tools.reports.generate_report import generate_report
+from research_tools.symbolic.manifest_visualizer import summarize_manifest, visualize_manifest
 from research_tools.video.decode_video import decode_video
 
 
@@ -124,6 +125,81 @@ def test_missing_file_errors(tmp_path):
         assert "Required input file not found" in str(exc)
     else:
         raise AssertionError("expected FileNotFoundError")
+
+
+def test_visualize_manifest_writes_review_artifacts(tmp_path):
+    manifest_path = tmp_path / "manifest.yaml"
+    report_path = tmp_path / "manifest_review.json"
+    manifest_path.write_text(
+        """
+experiment:
+  experiment_id: test_manifest
+medical_constraints:
+  allowed_signals: [stride_length, left_stride, right_stride]
+  allowed_operators: [add, sub, abs]
+  max_formula_depth: 4
+research_definition:
+  research_question: "Can asymmetry predict discomfort?"
+  target_variable: pain_score
+  candidate_variables: [stride_length, left_stride, right_stride]
+signals:
+  - name: stride_length
+    type: gait
+  - name: left_stride
+    type: gait
+  - name: right_stride
+    type: gait
+operator_registry:
+  add:
+    arity: 2
+  sub:
+    arity: 2
+  abs:
+    arity: 1
+formula_constraints:
+  max_depth: 4
+  max_nodes: 12
+search_config:
+  engine: pysr
+validation:
+  cross_validation: 5
+""".strip(),
+        encoding="utf-8",
+    )
+
+    result = visualize_manifest(str(manifest_path), str(report_path))
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert result["tool"] == "visualize_manifest"
+    assert payload["summary"]["experiment_id"] == "test_manifest"
+    assert report_path.with_suffix(".html").exists()
+
+
+def test_summarize_manifest_flags_schema_mismatches():
+    payload = summarize_manifest(
+        {
+            "experiment": {"experiment_id": "test_manifest"},
+            "medical_constraints": {
+                "allowed_signals": ["stride_length"],
+                "allowed_operators": ["add", "abs"],
+                "max_formula_depth": 3,
+            },
+            "research_definition": {
+                "research_question": "Can asymmetry predict discomfort?",
+                "target_variable": "pain_score",
+                "candidate_variables": ["stride_length", "right_stride"],
+            },
+            "signals": [{"name": "stride_length", "type": "gait"}],
+            "operator_registry": {"add": {"arity": 2}},
+            "formula_constraints": {"max_depth": 4},
+            "search_config": {"engine": "pysr"},
+            "validation": {"cross_validation": 2},
+        }
+    )
+
+    assert payload["warnings"]
+    assert any("candidate_variables" in item for item in payload["warnings"])
+    assert any("cross_validation" in item for item in payload["warnings"])
 
 
 def test_toolkit_avoids_platform_runtime_imports():

@@ -1,41 +1,76 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
 
 const navigation = [
+  { href: "/agent-lab", label: "Research Console" },
   { href: "/experiments", label: "Experiments" },
   { href: "/runs", label: "Runs" },
   { href: "/metrics", label: "Metrics" },
   { href: "/datasets", label: "Datasets" },
-  { href: "/agent-lab", label: "Agent Lab" },
 ];
 
-export function Shell({ title, eyebrow, children }: { title: string; eyebrow: string; children: ReactNode }) {
+function Navigation() {
+  const pathname = usePathname();
+
   return (
-    <main className="min-h-screen px-6 py-8 md:px-12">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-8 rounded-[2rem] border border-white/50 bg-[var(--card)] p-6 backdrop-blur">
-          <p className="mb-2 text-xs uppercase tracking-[0.3em] text-slate-500">{eyebrow}</p>
-          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+    <aside className="ui-sidebar">
+      <div>
+        <p className="ui-eyebrow">Hound Forward</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-white">Research Console</h1>
+        <p className="mt-3 text-sm leading-6 text-slate-300">
+          Chat-first orchestration with controlled visual modules, runtime tools, and evidence-aware review.
+        </p>
+      </div>
+
+      <nav className="mt-8 space-y-2">
+        {navigation.map((item) => (
+          <Link key={item.href} href={item.href} className={pathname === item.href ? "ui-sidebar-link ui-sidebar-link-active" : "ui-sidebar-link"}>
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+
+      <div className="mt-auto rounded-[1.25rem] border border-white/10 bg-white/5 p-4">
+        <p className="ui-micro text-slate-300">Mode</p>
+        <p className="mt-2 text-sm text-white">Placeholder-aware research workspace</p>
+      </div>
+    </aside>
+  );
+}
+
+export function Shell({
+  title,
+  eyebrow,
+  description,
+  children,
+}: {
+  title: string;
+  eyebrow: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <main className="min-h-screen bg-[var(--background)] px-4 py-4 md:px-6">
+      <div className="mx-auto grid max-w-[1600px] gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+        <Navigation />
+        <div className="min-w-0">
+          <header className="ui-topbar">
             <div>
-              <h1 className="m-0 text-4xl font-semibold">{title}</h1>
-              <p className="mb-0 mt-3 max-w-2xl text-sm text-slate-600">
-                Azure-aligned research platform scaffold for canine movement experiments, metrics, and agent-led iteration.
+              <p className="ui-eyebrow">{eyebrow}</p>
+              <h1 className="ui-page-title">{title}</h1>
+            </div>
+            <div className="max-w-2xl">
+              <p className="ui-copy">
+                {description ??
+                  "Agent-centric orchestration with predefined visual modules, evidence-aware rendering, and stable operational surfaces."}
               </p>
             </div>
-            <nav className="flex flex-wrap gap-2">
-              {navigation.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="rounded-full border border-slate-300/70 px-4 py-2 text-sm transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
-        </header>
-        {children}
+          </header>
+          <div className="mt-4 min-w-0">{children}</div>
+        </div>
       </div>
     </main>
   );

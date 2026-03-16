@@ -5,18 +5,38 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
+from research_tools.symbolic.manifest_visualizer import summarize_manifest
+
 from hound_forward.domain import (
+    ActiveContext,
     AssetRecord,
+    ComparisonCardItem,
+    ComparisonCardsModule,
+    ComparisonCardsPayload,
+    ConsoleAgentResponse,
+    ConsoleThreadMessage,
+    ConsoleViewMode,
+    DisplayPreference,
+    EvidenceContext,
+    EvidencePanelModule,
+    EvidencePanelPayload,
     ExecutionPlan,
     ExecutionStage,
     ExecutionStageType,
     ExperimentManifest,
     FormulaDefinitionRecord,
+    FormulaExplanationModule,
+    FormulaExplanationPayload,
     FormulaEvaluationRecord,
     FormulaProposalRecord,
     FormulaReviewRecord,
     FormulaStatus,
+    HighlightItem,
     MetricDefinition,
+    MetricTableColumn,
+    MetricTableModule,
+    MetricTablePayload,
+    MetricTableRow,
     MetricReadResponse,
     MetricResult,
     ReviewEvidenceBundle,
@@ -27,10 +47,17 @@ from hound_forward.domain import (
     RunRecord,
     RunStatus,
     SessionRecord,
+    SummaryCardModule,
+    SummaryCardPayload,
     StageResult,
+    ToolTraceItem,
     ToolInvocationRecord,
     ToolResponse,
+    TrendChartModule,
+    TrendChartPayload,
     VideoUploadResponse,
+    VideoPanelModule,
+    VideoPanelPayload,
 )
 from hound_forward.ports import ArtifactStore, Job, JobQueue, MetadataRepository, RunExecutor, ToolRunner
 
@@ -360,11 +387,272 @@ class ResearchPlatformService:
         filters = {"breed": breed, "video_ids": video_ids or []}
         return ToolResponse(ok=True, status="ok", data={"filters": filters, "message": "Placeholder dataset search scaffold."})
 
+    def tool_visualize_pysr_manifest(self, manifest: dict[str, Any]) -> ToolResponse:
+        report = summarize_manifest(manifest)
+        return ToolResponse(ok=True, status="ok", data=report)
+
+    def respond_to_console(
+        self,
+        *,
+        session_id: str,
+        message: str,
+        display_preferences: list[DisplayPreference] | None = None,
+        active_context: ActiveContext | None = None,
+    ) -> ConsoleAgentResponse:
+        session = self.container.metadata.get_session(session_id)
+        if session is None:
+            raise KeyError(f"Unknown session_id: {session_id}")
+
+        preferences = self._merge_display_preferences(message=message, explicit=display_preferences or [])
+        view_modes = self._select_view_modes(preferences)
+        modules = self._build_console_modules(session=session, message=message, preferences=preferences, active_context=active_context)
+        thread = [
+            ConsoleThreadMessage(role="user", content=message),
+            ConsoleThreadMessage(
+                role="assistant",
+                content="Research console response assembled from controlled visual modules and evidence-aware summaries.",
+            ),
+        ]
+        evidence_context = EvidenceContext(
+            metric_definition="mobility_index_v2",
+            time_range="Last 6 months",
+            data_quality="2 sessions contain incomplete metadata; values are still suitable for trend review.",
+            clinician_reviewed=True,
+            derived_metric=True,
+            references=["run-001", "formula:mobility_index_v2", "video:video-001"],
+        )
+        warnings = []
+        if DisplayPreference.RAW_VALUES_ONLY in preferences:
+            warnings.append("Raw values preference suppresses interpretation-heavy modules where possible.")
+        suggested_followups = [
+            "Show this as a table only.",
+            "Open the supporting video and evidence trail.",
+            "Compare this against the clinician validation cohort.",
+        ]
+        return ConsoleAgentResponse(
+            thread=thread,
+            message=self._assistant_message(message=message, preferences=preferences),
+            modules=modules,
+            view_modes=view_modes,
+            tool_trace=self._build_tool_trace(message=message, preferences=preferences),
+            evidence_context=evidence_context,
+            warnings=warnings,
+            suggested_followups=suggested_followups,
+        )
+
+    def tool_console_respond(
+        self,
+        *,
+        session_id: str,
+        message: str,
+        display_preferences: list[DisplayPreference] | None = None,
+        active_context: ActiveContext | None = None,
+    ) -> ToolResponse:
+        response = self.respond_to_console(
+            session_id=session_id,
+            message=message,
+            display_preferences=display_preferences,
+            active_context=active_context,
+        )
+        return ToolResponse(ok=True, status="ok", data=response.model_dump(mode="json"))
+
     def _require_run(self, run_id: str) -> RunRecord:
         run = self.container.metadata.get_run(run_id)
         if run is None:
             raise KeyError(f"Unknown run_id: {run_id}")
         return run
+
+    @staticmethod
+    def _merge_display_preferences(message: str, explicit: list[DisplayPreference]) -> list[DisplayPreference]:
+        preferences = list(explicit)
+        lowered = message.lower()
+        mapping = {
+            "table only": DisplayPreference.TABLE_ONLY,
+            "show as table": DisplayPreference.TABLE_ONLY,
+            "raw values": DisplayPreference.RAW_VALUES_ONLY,
+            "show raw": DisplayPreference.RAW_VALUES_ONLY,
+            "chart": DisplayPreference.PREFER_CHART,
+            "plot": DisplayPreference.PREFER_CHART,
+            "video": DisplayPreference.PREFER_VIDEO,
+            "evidence": DisplayPreference.EVIDENCE_FIRST,
+        }
+        for needle, preference in mapping.items():
+            if needle in lowered and preference not in preferences:
+                preferences.append(preference)
+        return preferences
+
+    @staticmethod
+    def _select_view_modes(preferences: list[DisplayPreference]) -> list[ConsoleViewMode]:
+        modes = [
+            ConsoleViewMode.SUMMARY,
+            ConsoleViewMode.CHART,
+            ConsoleViewMode.TABLE,
+            ConsoleViewMode.EVIDENCE,
+            ConsoleViewMode.VIDEO,
+            ConsoleViewMode.FORMULA,
+        ]
+        if DisplayPreference.TABLE_ONLY in preferences:
+            return [ConsoleViewMode.TABLE, ConsoleViewMode.EVIDENCE]
+        if DisplayPreference.EVIDENCE_FIRST in preferences:
+            return [ConsoleViewMode.EVIDENCE, ConsoleViewMode.SUMMARY, ConsoleViewMode.CHART, ConsoleViewMode.TABLE]
+        return modes
+
+    def _build_console_modules(
+        self,
+        *,
+        session: SessionRecord,
+        message: str,
+        preferences: list[DisplayPreference],
+        active_context: ActiveContext | None,
+    ) -> list[
+        SummaryCardModule
+        | TrendChartModule
+        | MetricTableModule
+        | EvidencePanelModule
+        | FormulaExplanationModule
+        | VideoPanelModule
+        | ComparisonCardsModule
+    ]:
+        metric_name = active_context.metric_name if active_context and active_context.metric_name else "mobility_index_v2"
+        summary_module = SummaryCardModule(
+            title="Research Summary",
+            payload=SummaryCardPayload(
+                title="Mobility trend review",
+                summary="Mobility has softened through March, with the sharpest deviation aligned to reduced stride symmetry.",
+                status="attention_needed",
+                highlights=[
+                    HighlightItem(label="Dog", value=session.title),
+                    HighlightItem(label="Focus metric", value=metric_name),
+                    HighlightItem(label="Abnormal window", value="March"),
+                ],
+            ),
+        )
+        trend_module = TrendChartModule(
+            title="Trend Chart",
+            payload=TrendChartPayload(
+                metric=metric_name,
+                unit="score",
+                time_range="12 months",
+                x_axis="Month",
+                y_axis="Mobility score",
+                series=[
+                    {"label": "Jan", "value": 0.82},
+                    {"label": "Feb", "value": 0.8},
+                    {"label": "Mar", "value": 0.61},
+                    {"label": "Apr", "value": 0.66},
+                    {"label": "May", "value": 0.71},
+                    {"label": "Jun", "value": 0.74},
+                ],
+            ),
+        )
+        table_module = MetricTableModule(
+            title="Metric Table",
+            payload=MetricTablePayload(
+                metric=metric_name,
+                columns=[
+                    MetricTableColumn(key="month", label="Month"),
+                    MetricTableColumn(key="value", label="Value"),
+                    MetricTableColumn(key="quality", label="Quality"),
+                ],
+                rows=[
+                    MetricTableRow(values={"month": "Jan", "value": 0.82, "quality": "complete"}, raw=False, derived=True),
+                    MetricTableRow(values={"month": "Feb", "value": 0.80, "quality": "complete"}, raw=False, derived=True),
+                    MetricTableRow(values={"month": "Mar", "value": 0.61, "quality": "missing metadata"}, raw=False, derived=True),
+                ],
+                sort="month.asc",
+            ),
+        )
+        evidence_module = EvidencePanelModule(
+            title="Evidence Panel",
+            payload=EvidencePanelPayload(
+                confidence="moderate",
+                review_status="clinician_reviewed",
+                missingness="2 of 14 sessions have incomplete metadata.",
+                provenance="Derived from stride_length / body_length with March anomaly evidence linked to asymmetry drift.",
+                sources=[
+                    {"label": "Run", "kind": "run", "reference": "run-001"},
+                    {"label": "Formula", "kind": "formula", "reference": "mobility_index_v2"},
+                    {"label": "Video", "kind": "video", "reference": active_context.asset_id if active_context and active_context.asset_id else "video-001"},
+                ],
+            ),
+        )
+        formula_module = FormulaExplanationModule(
+            title="Formula Explanation",
+            payload=FormulaExplanationPayload(
+                formula_id="mobility_index_v2",
+                expression="stride_length / body_length",
+                interpretation="Normalizing stride length by body size allows locomotion efficiency to be compared across dogs of different sizes.",
+                assumptions=[
+                    "Body length normalization remains stable across the observation window.",
+                    "Stride extraction quality is sufficient for month-level comparison.",
+                ],
+            ),
+        )
+        video_module = VideoPanelModule(
+            title="Video Review",
+            payload=VideoPanelPayload(
+                asset_id=active_context.asset_id if active_context and active_context.asset_id else "video-001",
+                title="March gait review clip",
+                timestamp_range="00:12-00:26",
+                related_metrics=[metric_name, "asymmetry_index"],
+            ),
+        )
+        comparison_module = ComparisonCardsModule(
+            title="Comparison Cards",
+            payload=ComparisonCardsPayload(
+                title="Month-over-month comparison",
+                items=[
+                    ComparisonCardItem(label="March vs February", value="-0.19", delta="-24%"),
+                    ComparisonCardItem(label="March asymmetry", value="0.18", delta="+0.07"),
+                ],
+            ),
+        )
+
+        modules: list[Any] = [summary_module, trend_module, table_module, evidence_module, formula_module, video_module, comparison_module]
+        if DisplayPreference.TABLE_ONLY in preferences:
+            return [table_module, evidence_module]
+        if DisplayPreference.RAW_VALUES_ONLY in preferences:
+            return [summary_module, table_module, evidence_module]
+        if DisplayPreference.PREFER_VIDEO in preferences:
+            return [summary_module, video_module, trend_module, evidence_module, formula_module]
+        if DisplayPreference.EVIDENCE_FIRST in preferences:
+            return [evidence_module, summary_module, trend_module, table_module, formula_module]
+        if "compare" in message.lower():
+            return [summary_module, comparison_module, trend_module, table_module, evidence_module]
+        return modules
+
+    @staticmethod
+    def _build_tool_trace(message: str, preferences: list[DisplayPreference]) -> list[ToolTraceItem]:
+        return [
+            ToolTraceItem(
+                tool_name="intent_parser",
+                purpose="Normalize user goal and display intent into console semantics.",
+                status="ok",
+                details={"message": message, "display_preferences": [item.value for item in preferences]},
+            ),
+            ToolTraceItem(
+                tool_name="read_metrics",
+                purpose="Retrieve placeholder metric evidence for the selected session context.",
+                status="ok",
+                details={"metric": "mobility_index_v2", "time_range": "12 months"},
+            ),
+            ToolTraceItem(
+                tool_name="render_modules",
+                purpose="Select controlled visual modules for frontend rendering.",
+                status="ok",
+                details={"module_types": ["summary_card", "trend_chart", "metric_table", "evidence_panel"]},
+            ),
+        ]
+
+    @staticmethod
+    def _assistant_message(message: str, preferences: list[DisplayPreference]) -> str:
+        if DisplayPreference.TABLE_ONLY in preferences:
+            return "The trend has been reduced to a table-first view with supporting evidence because you requested a table-oriented output."
+        if DisplayPreference.PREFER_VIDEO in preferences:
+            return "The response prioritizes video review because your prompt indicates you want supporting visual session evidence."
+        if "compare" in message.lower():
+            return "The console assembled a comparison-focused response using controlled cards, trend evidence, and a supporting metric table."
+        return "The console assembled a summary, chart, table, evidence, video, and formula explanation using controlled visual modules."
 
     def _find_next_queued_run(self) -> RunRecord | None:
         for run in self.container.metadata.list_runs():

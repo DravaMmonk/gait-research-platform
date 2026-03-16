@@ -1,0 +1,153 @@
+experiment:
+  experiment_id: gait_pain_discovery_v1
+  generated_by: research_agent
+  timestamp: "2026-03-16T10:30:00Z"
+  manifest_version: 1
+  status: draft
+
+medical_constraints:
+  allowed_signals:
+    - stride_length
+    - stride_variability
+    - head_bob_amplitude
+    - body_length
+    - left_stride
+    - right_stride
+  allowed_operators:
+    - add
+    - sub
+    - mul
+    - div
+    - abs
+    - ratio
+  max_formula_depth: 5
+  prohibited_transforms:
+    - sin
+    - cos
+    - tan
+    - exp
+
+research_definition:
+  research_question: "Can gait asymmetry predict early joint pain?"
+  target_variable: pain_score
+  target_type: regression
+  cohort_definition:
+    species: canine
+    study_group: orthopedic_screening
+    inclusion:
+      - adult_dogs
+      - validated_gait_capture
+    exclusion:
+      - missing_clinician_labels
+  candidate_variables:
+    - stride_length
+    - left_stride
+    - right_stride
+    - stride_variability
+    - head_bob_amplitude
+    - body_length
+
+signals:
+  - name: stride_length
+    type: gait
+    unit: body_length_ratio
+    reliability: high
+    source_pipeline: compute_gait_metrics
+  - name: left_stride
+    type: gait
+    unit: body_length_ratio
+    reliability: high
+    source_pipeline: compute_stride
+  - name: right_stride
+    type: gait
+    unit: body_length_ratio
+    reliability: high
+    source_pipeline: compute_stride
+  - name: stride_variability
+    type: gait
+    unit: coefficient_of_variation
+    reliability: medium
+    source_pipeline: compute_gait_metrics
+  - name: head_bob_amplitude
+    type: posture
+    unit: radians
+    reliability: medium
+    source_pipeline: posture_signal_v1
+  - name: body_length
+    type: morphology
+    unit: normalized_length
+    reliability: high
+    source_pipeline: morphology_v1
+
+operator_registry:
+  add:
+    arity: 2
+    interpretability: high
+    pysr_name: "+"
+  sub:
+    arity: 2
+    interpretability: high
+    pysr_name: "-"
+  mul:
+    arity: 2
+    interpretability: medium
+    pysr_name: "*"
+  div:
+    arity: 2
+    interpretability: medium
+    pysr_name: "/"
+  abs:
+    arity: 1
+    interpretability: high
+    pysr_name: "abs"
+  ratio:
+    arity: 2
+    interpretability: high
+    pysr_name: "/"
+    notes: "Semantic alias for medically interpretable normalized ratios."
+
+formula_constraints:
+  max_depth: 5
+  max_nodes: 15
+  allowed_structures:
+    - linear
+    - ratio
+    - difference
+  nested_constraints:
+    abs:
+      max_nesting: 1
+    div:
+      max_nesting: 2
+
+search_config:
+  engine: pysr
+  population_size: 1500
+  generations: 60
+  model_selection: best
+  binary_operators:
+    - "+"
+    - "-"
+    - "*"
+    - "/"
+  unary_operators:
+    - abs
+  maxsize: 15
+  warm_start: false
+  random_state: 42
+  deterministic: true
+  parallelism: serial
+  complexity_penalty: 0.01
+
+validation:
+  metric: r2
+  cross_validation: 5
+  held_out_split:
+    strategy: dog_id
+  stability_test:
+    dataset_split: breed
+  significance_test:
+    p_value_threshold: 0.05
+  robustness_checks:
+    - missing_signal_sensitivity
+    - breed_generalization
+    - noisy_video_resilience

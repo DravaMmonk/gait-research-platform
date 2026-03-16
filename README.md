@@ -113,9 +113,15 @@ See:
 - [docs/platform_architecture.md](/Users/drava/Documents/Hound/hf-playground/docs/platform_architecture.md)
 - [docs/agent_architecture.md](/Users/drava/Documents/Hound/hf-playground/docs/agent_architecture.md)
 - [docs/deployment_azure.md](/Users/drava/Documents/Hound/hf-playground/docs/deployment_azure.md)
+- [docs/frontend_design_spec.md](/Users/drava/Documents/Hound/hf-playground/docs/frontend_design_spec.md)
 - [docs/migration_from_mvp.md](/Users/drava/Documents/Hound/hf-playground/docs/migration_from_mvp.md)
 - [docs/runtime_validation.md](/Users/drava/Documents/Hound/hf-playground/docs/runtime_validation.md)
 - [docs/formula_infrastructure.md](/Users/drava/Documents/Hound/hf-playground/docs/formula_infrastructure.md)
+- [docs/symbolic_regression_concepts.md](/Users/drava/Documents/Hound/hf-playground/docs/symbolic_regression_concepts.md)
+- [docs/medical_symbolic_regression_principles.md](/Users/drava/Documents/Hound/hf-playground/docs/medical_symbolic_regression_principles.md)
+- [docs/pysr_architecture.md](/Users/drava/Documents/Hound/hf-playground/docs/pysr_architecture.md)
+- [docs/pysr_manifest_schema_principles.md](/Users/drava/Documents/Hound/hf-playground/docs/pysr_manifest_schema_principles.md)
+- [docs/research_console_contract.md](/Users/drava/Documents/Hound/hf-playground/docs/research_console_contract.md)
 
 ## Testing
 

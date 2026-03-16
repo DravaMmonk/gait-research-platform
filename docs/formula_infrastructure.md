@@ -50,3 +50,4 @@ Future formula work should:
 2. reuse `research_tools` where possible
 3. route execution through staged runs
 4. keep human validation as a first-class audit surface
+5. standardize symbolic search on PySR as the core engine while preserving module isolation from orchestration and persistence concerns

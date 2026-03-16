@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -313,3 +313,212 @@ class ToolResponse(BaseModel):
     status: str
     data: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
+
+
+class DisplayPreference(StrEnum):
+    TABLE_ONLY = "table_only"
+    PREFER_CHART = "prefer_chart"
+    PREFER_VIDEO = "prefer_video"
+    RAW_VALUES_ONLY = "raw_values_only"
+    EVIDENCE_FIRST = "evidence_first"
+
+
+class ConsoleViewMode(StrEnum):
+    SUMMARY = "summary"
+    CHART = "chart"
+    TABLE = "table"
+    EVIDENCE = "evidence"
+    VIDEO = "video"
+    FORMULA = "formula"
+
+
+class ConsoleThreadMessage(BaseModel):
+    role: str
+    content: str
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class ActiveContext(BaseModel):
+    session_id: str | None = None
+    run_id: str | None = None
+    metric_name: str | None = None
+    formula_definition_id: str | None = None
+    asset_id: str | None = None
+
+
+class HighlightItem(BaseModel):
+    label: str
+    value: str
+
+
+class SummaryCardPayload(BaseModel):
+    title: str
+    summary: str
+    status: str
+    highlights: list[HighlightItem] = Field(default_factory=list)
+
+
+class SeriesPoint(BaseModel):
+    label: str
+    value: float
+
+
+class TrendChartPayload(BaseModel):
+    metric: str
+    unit: str
+    time_range: str
+    x_axis: str
+    y_axis: str
+    series: list[SeriesPoint] = Field(default_factory=list)
+
+
+class MetricTableColumn(BaseModel):
+    key: str
+    label: str
+
+
+class MetricTableRow(BaseModel):
+    values: dict[str, str | float | int | bool | None] = Field(default_factory=dict)
+    raw: bool = False
+    derived: bool = True
+
+
+class MetricTablePayload(BaseModel):
+    metric: str
+    columns: list[MetricTableColumn] = Field(default_factory=list)
+    rows: list[MetricTableRow] = Field(default_factory=list)
+    sort: str | None = None
+
+
+class EvidenceSource(BaseModel):
+    label: str
+    kind: str
+    reference: str
+
+
+class EvidencePanelPayload(BaseModel):
+    confidence: str
+    review_status: str
+    missingness: str
+    provenance: str
+    sources: list[EvidenceSource] = Field(default_factory=list)
+
+
+class FormulaExplanationPayload(BaseModel):
+    formula_id: str
+    expression: str
+    interpretation: str
+    assumptions: list[str] = Field(default_factory=list)
+
+
+class VideoPanelPayload(BaseModel):
+    asset_id: str
+    title: str
+    timestamp_range: str
+    related_metrics: list[str] = Field(default_factory=list)
+
+
+class ComparisonCardItem(BaseModel):
+    label: str
+    value: str
+    delta: str | None = None
+
+
+class ComparisonCardsPayload(BaseModel):
+    title: str
+    items: list[ComparisonCardItem] = Field(default_factory=list)
+
+
+class SummaryCardModule(BaseModel):
+    type: Literal["summary_card"] = "summary_card"
+    title: str
+    view_mode: ConsoleViewMode = ConsoleViewMode.SUMMARY
+    payload: SummaryCardPayload
+
+
+class TrendChartModule(BaseModel):
+    type: Literal["trend_chart"] = "trend_chart"
+    title: str
+    view_mode: ConsoleViewMode = ConsoleViewMode.CHART
+    payload: TrendChartPayload
+
+
+class MetricTableModule(BaseModel):
+    type: Literal["metric_table"] = "metric_table"
+    title: str
+    view_mode: ConsoleViewMode = ConsoleViewMode.TABLE
+    payload: MetricTablePayload
+
+
+class EvidencePanelModule(BaseModel):
+    type: Literal["evidence_panel"] = "evidence_panel"
+    title: str
+    view_mode: ConsoleViewMode = ConsoleViewMode.EVIDENCE
+    payload: EvidencePanelPayload
+
+
+class FormulaExplanationModule(BaseModel):
+    type: Literal["formula_explanation_card"] = "formula_explanation_card"
+    title: str
+    view_mode: ConsoleViewMode = ConsoleViewMode.FORMULA
+    payload: FormulaExplanationPayload
+
+
+class VideoPanelModule(BaseModel):
+    type: Literal["video_panel"] = "video_panel"
+    title: str
+    view_mode: ConsoleViewMode = ConsoleViewMode.VIDEO
+    payload: VideoPanelPayload
+
+
+class ComparisonCardsModule(BaseModel):
+    type: Literal["comparison_cards"] = "comparison_cards"
+    title: str
+    view_mode: ConsoleViewMode = ConsoleViewMode.SUMMARY
+    payload: ComparisonCardsPayload
+
+
+VisualModule = Annotated[
+    SummaryCardModule
+    | TrendChartModule
+    | MetricTableModule
+    | EvidencePanelModule
+    | FormulaExplanationModule
+    | VideoPanelModule
+    | ComparisonCardsModule,
+    Field(discriminator="type"),
+]
+
+
+class ToolTraceItem(BaseModel):
+    tool_name: str
+    purpose: str
+    status: str
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class EvidenceContext(BaseModel):
+    metric_definition: str
+    time_range: str
+    data_quality: str
+    clinician_reviewed: bool
+    derived_metric: bool
+    references: list[str] = Field(default_factory=list)
+
+
+class ConsoleAgentRequest(BaseModel):
+    session_id: str
+    message: str
+    display_preferences: list[DisplayPreference] = Field(default_factory=list)
+    active_context: ActiveContext | None = None
+
+
+class ConsoleAgentResponse(BaseModel):
+    thread: list[ConsoleThreadMessage] = Field(default_factory=list)
+    message: str
+    modules: list[VisualModule] = Field(default_factory=list)
+    view_modes: list[ConsoleViewMode] = Field(default_factory=list)
+    tool_trace: list[ToolTraceItem] = Field(default_factory=list)
+    evidence_context: EvidenceContext
+    warnings: list[str] = Field(default_factory=list)
+    suggested_followups: list[str] = Field(default_factory=list)

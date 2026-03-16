@@ -18,6 +18,8 @@ class ToolRegistry:
             "compare_runs": self.service.tool_compare_runs,
             "list_session_videos": self._list_session_videos,
             "enqueue_run": self.service.tool_enqueue_run,
+            "console_respond": self.service.tool_console_respond,
+            "visualize_pysr_manifest": self.service.tool_visualize_pysr_manifest,
         }
 
     def call(self, name: str, **kwargs: Any) -> ToolResponse:

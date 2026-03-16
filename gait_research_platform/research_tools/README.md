@@ -17,6 +17,7 @@ Agent-oriented toolkit for extracting gait research capabilities out of the lega
 - `gait/compute_stride.py`
 - `gait/compute_gait_metrics.py`
 - `reports/generate_report.py`
+- `symbolic/manifest_visualizer.py`
 
 ## Example
 ```bash

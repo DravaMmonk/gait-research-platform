@@ -13,7 +13,14 @@ from hound_forward.agent_system.graphs.research_graph import ResearchGraph
 from hound_forward.agent_system.planners.experiment_planner import ExperimentManifestPlanner
 from hound_forward.agent_system.tools.registry import ToolRegistry
 from hound_forward.application import ResearchPlatformService, ServiceContainer
-from hound_forward.domain import ReviewEvidenceBundle, ReviewVerdict, ExperimentManifest, FormulaStatus, RunKind
+from hound_forward.domain import (
+    ConsoleAgentRequest,
+    ExperimentManifest,
+    FormulaStatus,
+    ReviewEvidenceBundle,
+    ReviewVerdict,
+    RunKind,
+)
 from hound_forward.pipeline import DummyRuntimeValidationPipeline, PlatformRunExecutor
 from hound_forward.settings import PlatformSettings
 
@@ -259,6 +266,19 @@ def create_app() -> FastAPI:
     @app.post("/agent/execute-plan")
     def agent_execute_plan(request: AgentPlanRequest) -> dict:
         return graph.invoke(goal=request.goal, session_id=request.session_id)
+
+    @app.post("/agent/console/respond")
+    def agent_console_respond(request: ConsoleAgentRequest) -> dict:
+        try:
+            response = service.respond_to_console(
+                session_id=request.session_id,
+                message=request.message,
+                display_preferences=request.display_preferences,
+                active_context=request.active_context,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return response.model_dump(mode="json")
 
     return app
 

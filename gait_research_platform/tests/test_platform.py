@@ -302,3 +302,35 @@ def test_api_surface_supports_formula_scaffold_endpoints(tmp_path: Path, monkeyp
     assert client.get("/formulas/definitions").status_code == 200
     assert client.get("/formulas/proposals").status_code == 200
     assert client.get("/formulas/reviews").status_code == 200
+
+
+def test_api_surface_supports_console_agent_response(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'console-api.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "console-api-artifacts"))
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_graph.cache_clear()
+    client = TestClient(create_app())
+
+    session_response = client.post("/sessions", json={"title": "Console session", "metadata": {"source": "test"}})
+    assert session_response.status_code == 200
+    session = session_response.json()
+
+    response = client.post(
+        "/agent/console/respond",
+        json={
+            "session_id": session["session_id"],
+            "message": "Compare this dog's mobility over the last 6 months and show as table only.",
+            "display_preferences": ["table_only"],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["message"]
+    assert payload["view_modes"][0] == "table"
+    assert payload["modules"]
+    assert {item["type"] for item in payload["modules"]} == {"metric_table", "evidence_panel"}
+    assert payload["evidence_context"]["derived_metric"] is True
+    assert payload["tool_trace"]
