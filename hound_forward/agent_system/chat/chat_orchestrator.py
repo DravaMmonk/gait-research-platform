@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from hound_forward.agent_system.graphs import ResearchGraph
@@ -106,14 +107,26 @@ class ChatOrchestrator:
         session = self.service.container.metadata.get_session(session_id)
         runs = self.service.list_runs(session_id=session_id)
         available_tools = ToolRegistry(self.service).describe_tools()
+        current_session_videos = [
+            {
+                "asset_id": asset.asset_id,
+                "file_name": Path(asset.blob_path).name,
+                "mime_type": asset.mime_type,
+                "created_at": asset.created_at.isoformat(),
+            }
+            for asset in self.service.list_session_videos(session_id)
+        ]
         session_summary = {
             "session_id": session_id,
             "session_title": session.title if session is not None else "unknown",
             "run_count": len(runs),
             "latest_completed_run_id": next((run.run_id for run in reversed(runs) if run.status == RunStatus.COMPLETED), None),
             "available_tool_count": len(available_tools),
+            "video_asset_count": len(current_session_videos),
         }
-        if self._is_tool_inventory_question(message):
+        if self._is_current_session_video_question(message):
+            answer = self._describe_current_session_videos(current_session_videos)
+        elif self._is_tool_inventory_question(message):
             answer = self.reasoner.describe_tools(
                 message=message,
                 session_summary=session_summary,
@@ -132,6 +145,7 @@ class ChatOrchestrator:
                 "intent": ChatIntent.ASK_QUESTION.value,
                 "context": session_summary,
                 "available_tools": available_tools,
+                "current_session_videos": current_session_videos,
             },
         )
 
@@ -226,3 +240,32 @@ class ChatOrchestrator:
             "can you invoke",
         )
         return any(marker in normalized for marker in inventory_markers)
+
+    @staticmethod
+    def _is_current_session_video_question(message: str) -> bool:
+        normalized = message.lower()
+        if "video" not in normalized:
+            return False
+        return any(
+            marker in normalized
+            for marker in (
+                "current session",
+                "this session",
+                "uploaded video",
+                "uploaded videos",
+                "video assets",
+                "available video",
+                "available videos",
+                "list videos",
+            )
+        )
+
+    @staticmethod
+    def _describe_current_session_videos(current_session_videos: list[dict[str, str]]) -> str:
+        if not current_session_videos:
+            return "The current session has no uploaded video assets yet."
+
+        lines = ["Uploaded video assets in the current session:"]
+        for video in current_session_videos:
+            lines.append(f"- {video['file_name']} ({video['mime_type']}, asset {video['asset_id']})")
+        return "\n".join(lines)

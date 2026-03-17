@@ -23,6 +23,8 @@ def fake_openai_json_response(self, *, system_prompt, user_prompt, schema_name, 
     if schema_name == "intent_classification":
         if "what tools can you call" in user_prompt.lower():
             return {"intent": "ask_question"}
+        if "uploaded video assets in the current session" in user_prompt.lower():
+            return {"intent": "ask_question"}
         if "what does this result mean" in user_prompt.lower():
             return {"intent": "explain_result"}
         if "stride length" in user_prompt.lower():
@@ -297,6 +299,33 @@ def test_api_surface_supports_video_upload_run_detail_and_agent_execution(tmp_pa
     assert "Agent tool-chain result" in agent_response.json()["recommendation"]
 
 
+def test_api_surface_lists_and_deletes_sessions(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'session-admin.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "session-admin-artifacts"))
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_graph.cache_clear()
+    app_module.build_chat_orchestrator.cache_clear()
+    client = TestClient(create_app())
+
+    first = client.post("/sessions", json={"title": "Session A"}).json()
+    second = client.post("/sessions", json={"title": "Session B"}).json()
+
+    list_response = client.get("/sessions")
+    assert list_response.status_code == 200
+    listed_ids = {item["session_id"] for item in list_response.json()["sessions"]}
+    assert {first["session_id"], second["session_id"]} <= listed_ids
+
+    delete_response = client.delete(f"/sessions/{first['session_id']}")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+
+    refreshed_ids = {item["session_id"] for item in client.get("/sessions").json()["sessions"]}
+    assert first["session_id"] not in refreshed_ids
+    assert second["session_id"] in refreshed_ids
+
+
 def test_api_surface_supports_formula_scaffold_endpoints(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'formula-api.db'}")
     monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "formula-api-artifacts"))
@@ -521,6 +550,44 @@ def test_api_chat_reports_registered_tools_for_tool_inventory_question(tmp_path:
     assert "extract_keypoints" in payload["message"]
     tool_names = {tool["name"] for tool in payload["structured_data"]["available_tools"]}
     assert {"create_run", "read_metrics", "decode_video", "extract_keypoints"} <= tool_names
+
+
+def test_api_chat_lists_current_session_videos_without_requiring_session_id_in_message(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'chat-videos.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "chat-videos-artifacts"))
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.intent_router.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.reasoner.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_graph.cache_clear()
+    app_module.build_chat_orchestrator.cache_clear()
+    client = TestClient(create_app())
+
+    session_response = client.post("/sessions", json={"title": "Video session"})
+    session = session_response.json()
+    client.post(
+        f"/sessions/{session['session_id']}/videos",
+        files={"file": ("sample.mp4", b"fake-video-binary", "video/mp4")},
+    )
+
+    response = client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "List the uploaded video assets in the current session."},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["type"] == "text"
+    assert "current session" in payload["message"].lower()
+    assert "sample.mp4" in payload["message"]
+    assert payload["structured_data"]["current_session_videos"]
 
 
 def test_api_chat_explains_existing_run(tmp_path: Path, monkeypatch) -> None:

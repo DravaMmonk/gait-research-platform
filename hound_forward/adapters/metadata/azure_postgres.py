@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, String, create_engine, inspect, select, text
+from sqlalchemy import JSON, DateTime, Float, String, create_engine, delete, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -208,6 +208,49 @@ class AzurePostgresMetadataRepository:
                 metadata=model.metadata_json,
                 created_at=model.created_at,
             )
+
+    def list_sessions(self) -> list[SessionRecord]:
+        with self._session_factory() as db:
+            stmt = select(SessionModel).order_by(SessionModel.created_at.desc())
+            return [
+                SessionRecord(
+                    session_id=model.session_id,
+                    dog_id=model.dog_id,
+                    title=model.title,
+                    status=model.status,
+                    metadata=model.metadata_json,
+                    created_at=model.created_at,
+                )
+                for model in db.scalars(stmt)
+            ]
+
+    def delete_session(self, session_id: str) -> bool:
+        with self._session_factory.begin() as db:
+            session_model = db.get(SessionModel, session_id)
+            if session_model is None:
+                return False
+
+            run_ids = list(db.scalars(select(RunModel.run_id).where(RunModel.session_id == session_id)))
+            if run_ids:
+                formula_evaluation_ids = list(
+                    db.scalars(select(FormulaEvaluationModel.formula_evaluation_id).where(FormulaEvaluationModel.run_id.in_(run_ids)))
+                )
+                if formula_evaluation_ids:
+                    db.execute(
+                        delete(FormulaReviewModel).where(FormulaReviewModel.formula_evaluation_id.in_(formula_evaluation_ids))
+                    )
+                    db.execute(
+                        delete(FormulaEvaluationModel).where(FormulaEvaluationModel.formula_evaluation_id.in_(formula_evaluation_ids))
+                    )
+                db.execute(delete(FormulaProposalModel).where(FormulaProposalModel.source_run_id.in_(run_ids)))
+                db.execute(delete(MetricResultModel).where(MetricResultModel.run_id.in_(run_ids)))
+                db.execute(delete(RunEventModel).where(RunEventModel.run_id.in_(run_ids)))
+                db.execute(delete(AssetModel).where(AssetModel.run_id.in_(run_ids)))
+                db.execute(delete(RunModel).where(RunModel.run_id.in_(run_ids)))
+
+            db.execute(delete(AssetModel).where(AssetModel.session_id == session_id))
+            db.execute(delete(SessionModel).where(SessionModel.session_id == session_id))
+        return True
 
     def create_run(self, run: RunRecord) -> RunRecord:
         with self._session_factory.begin() as db:

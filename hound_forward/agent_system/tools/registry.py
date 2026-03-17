@@ -14,6 +14,18 @@ class ToolRegistry:
             "output_kind": "session",
             "scope": "platform_registry",
         },
+        "list_sessions": {
+            "description": "List existing research sessions that can be selected in the console.",
+            "input_kind": "none",
+            "output_kind": "session_list",
+            "scope": "platform_registry",
+        },
+        "delete_session": {
+            "description": "Delete a research session and its stored run metadata.",
+            "input_kind": "session_reference",
+            "output_kind": "deletion_result",
+            "scope": "platform_registry",
+        },
         "create_run": {
             "description": "Create a run from a validated manifest and optional execution plan.",
             "input_kind": "manifest",
@@ -45,8 +57,8 @@ class ToolRegistry:
             "scope": "platform_registry",
         },
         "list_session_videos": {
-            "description": "List uploaded video assets available in the current session.",
-            "input_kind": "session_id",
+            "description": "List uploaded video assets available in the active research session.",
+            "input_kind": "current_session",
             "output_kind": "video_list",
             "scope": "platform_registry",
         },
@@ -74,6 +86,8 @@ class ToolRegistry:
         self.service = service
         self._tools: dict[str, Callable[..., ToolResponse]] = {
             "create_session": self.service.tool_create_session,
+            "list_sessions": self.service.tool_list_sessions,
+            "delete_session": self.service.tool_delete_session,
             "create_run": self._create_run,
             "get_run": self.service.tool_get_run,
             "list_runs": self.service.tool_list_runs,

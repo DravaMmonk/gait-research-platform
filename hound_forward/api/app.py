@@ -124,12 +124,24 @@ def create_app() -> FastAPI:
         session = service.create_session(title=request.title, dog_id=request.dog_id, metadata=request.metadata)
         return session.model_dump(mode="json")
 
+    @app.get("/sessions")
+    def list_sessions() -> dict:
+        return {"sessions": [item.model_dump(mode="json") for item in service.list_sessions()]}
+
     @app.get("/sessions/{session_id}")
     def get_session(session_id: str) -> dict:
         session = service.container.metadata.get_session(session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="Session not found")
         return session.model_dump(mode="json")
+
+    @app.delete("/sessions/{session_id}")
+    def delete_session(session_id: str) -> dict:
+        try:
+            service.delete_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"session_id": session_id, "deleted": True}
 
     @app.post("/sessions/{session_id}/videos")
     async def upload_video(session_id: str, file: UploadFile = File(...)) -> dict:

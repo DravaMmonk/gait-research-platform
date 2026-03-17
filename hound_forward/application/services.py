@@ -85,6 +85,15 @@ class ResearchPlatformService:
         session = SessionRecord(title=title, dog_id=dog_id, metadata=metadata or {})
         return self.container.metadata.create_session(session)
 
+    def list_sessions(self) -> list[SessionRecord]:
+        return self.container.metadata.list_sessions()
+
+    def delete_session(self, session_id: str) -> bool:
+        deleted = self.container.metadata.delete_session(session_id)
+        if not deleted:
+            raise KeyError(f"Unknown session_id: {session_id}")
+        return True
+
     def create_run(
         self,
         session_id: str,
@@ -341,6 +350,14 @@ class ResearchPlatformService:
     def tool_create_session(self, title: str, dog_id: str | None = None, metadata: dict[str, Any] | None = None) -> ToolResponse:
         session = self.create_session(title=title, dog_id=dog_id, metadata=metadata)
         return ToolResponse(ok=True, resource_id=session.session_id, status="created", data=session.model_dump(mode="json"))
+
+    def tool_list_sessions(self) -> ToolResponse:
+        sessions = [item.model_dump(mode="json") for item in self.list_sessions()]
+        return ToolResponse(ok=True, status="ok", data={"sessions": sessions})
+
+    def tool_delete_session(self, session_id: str) -> ToolResponse:
+        self.delete_session(session_id)
+        return ToolResponse(ok=True, resource_id=session_id, status="deleted", data={"session_id": session_id})
 
     def tool_create_run(
         self,
