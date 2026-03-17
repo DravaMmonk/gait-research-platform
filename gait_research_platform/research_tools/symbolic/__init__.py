@@ -1,2 +1,0 @@
-"""Symbolic regression research tools."""
-

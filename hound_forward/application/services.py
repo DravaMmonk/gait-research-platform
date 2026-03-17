@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from research_tools.symbolic.manifest_visualizer import summarize_manifest
+from hound_forward.agent_tools import summarize_manifest
 
 from hound_forward.domain import (
     ActiveContext,
@@ -85,7 +85,13 @@ class ResearchPlatformService:
         session = SessionRecord(title=title, dog_id=dog_id, metadata=metadata or {})
         return self.container.metadata.create_session(session)
 
-    def create_run(self, session_id: str, manifest: ExperimentManifest, run_kind: RunKind = RunKind.PIPELINE) -> RunRecord:
+    def create_run(
+        self,
+        session_id: str,
+        manifest: ExperimentManifest,
+        run_kind: RunKind = RunKind.PIPELINE,
+        execution_plan: ExecutionPlan | None = None,
+    ) -> RunRecord:
         session = self.container.metadata.get_session(session_id)
         if session is None:
             raise KeyError(f"Unknown session_id: {session_id}")
@@ -100,7 +106,7 @@ class ResearchPlatformService:
             run_kind=run_kind,
             manifest=manifest,
             input_asset_ids=list(manifest.input_asset_ids),
-            execution_plan=self._build_default_execution_plan(run_kind=run_kind, manifest=manifest),
+            execution_plan=execution_plan or self._build_default_execution_plan(run_kind=run_kind, manifest=manifest),
         )
         saved = self.container.metadata.create_run(run)
         self.container.metadata.append_run_event(
@@ -336,8 +342,14 @@ class ResearchPlatformService:
         session = self.create_session(title=title, dog_id=dog_id, metadata=metadata)
         return ToolResponse(ok=True, resource_id=session.session_id, status="created", data=session.model_dump(mode="json"))
 
-    def tool_create_run(self, session_id: str, manifest: ExperimentManifest) -> ToolResponse:
-        run = self.create_run(session_id=session_id, manifest=manifest)
+    def tool_create_run(
+        self,
+        session_id: str,
+        manifest: ExperimentManifest,
+        execution_plan: ExecutionPlan | None = None,
+        run_kind: RunKind = RunKind.PIPELINE,
+    ) -> ToolResponse:
+        run = self.create_run(session_id=session_id, manifest=manifest, execution_plan=execution_plan, run_kind=run_kind)
         return ToolResponse(ok=True, resource_id=run.run_id, status=run.status.value, data=run.model_dump(mode="json"))
 
     def tool_enqueue_run(self, run_id: str) -> ToolResponse:
@@ -662,31 +674,42 @@ class ResearchPlatformService:
 
     @staticmethod
     def _build_default_execution_plan(run_kind: RunKind, manifest: ExperimentManifest) -> ExecutionPlan:
+        stages = [
+            ExecutionStage(
+                name="extract_keypoints",
+                stage_type=ExecutionStageType.AGENT_TOOL,
+                tool_invocation=ToolInvocationRecord(
+                    tool_name="extract_keypoints",
+                    input_asset_id=manifest.input_asset_ids[0] if manifest.input_asset_ids else None,
+                ),
+                metadata={"planned_by": "service_default", "run_kind": run_kind.value},
+            ),
+            ExecutionStage(
+                name="compute_gait_metrics",
+                stage_type=ExecutionStageType.AGENT_TOOL,
+                tool_invocation=ToolInvocationRecord(tool_name="compute_gait_metrics"),
+                metadata={"planned_by": "service_default", "run_kind": run_kind.value},
+            ),
+            ExecutionStage(
+                name="generate_report",
+                stage_type=ExecutionStageType.AGENT_TOOL,
+                tool_invocation=ToolInvocationRecord(tool_name="generate_report"),
+                metadata={"planned_by": "service_default", "run_kind": run_kind.value},
+            ),
+        ]
         if run_kind == RunKind.FORMULA_EVALUATION:
-            stages = [
+            stages.insert(
+                0,
                 ExecutionStage(
                     name="decode_video",
-                    stage_type=ExecutionStageType.RESEARCH_TOOL,
+                    stage_type=ExecutionStageType.AGENT_TOOL,
                     tool_invocation=ToolInvocationRecord(
                         tool_name="decode_video",
                         input_asset_id=manifest.input_asset_ids[0] if manifest.input_asset_ids else None,
-                        output_name="decode_video.json",
-                        artifact_kind="report",
                     ),
+                    metadata={"planned_by": "service_default", "run_kind": run_kind.value},
                 ),
-                ExecutionStage(
-                    name="formula_evaluation_placeholder",
-                    stage_type=ExecutionStageType.FORMULA_EVALUATOR,
-                    metadata={"mode": "scaffold"},
-                ),
-            ]
-        else:
-            stages = [
-                ExecutionStage(name="load_video_asset", stage_type=ExecutionStageType.PLACEHOLDER_PIPELINE),
-                ExecutionStage(name="generate_fake_keypoints", stage_type=ExecutionStageType.PLACEHOLDER_PIPELINE),
-                ExecutionStage(name="compute_fake_metrics", stage_type=ExecutionStageType.PLACEHOLDER_PIPELINE),
-                ExecutionStage(name="generate_report", stage_type=ExecutionStageType.PLACEHOLDER_PIPELINE),
-            ]
+            )
         return ExecutionPlan(stages=stages)
 
     @staticmethod

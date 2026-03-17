@@ -1,3 +1,3 @@
-from .local import LocalResearchToolRunner
+from hound_forward.agent_tools import AgentToolExecutor
 
-__all__ = ["LocalResearchToolRunner"]
+__all__ = ["AgentToolExecutor"]

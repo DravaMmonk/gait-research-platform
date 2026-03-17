@@ -1,4 +1,0 @@
-name: velocity_signal
-enabled: true
-params:
-  normalize: true

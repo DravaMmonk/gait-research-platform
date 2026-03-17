@@ -1,2 +1,0 @@
-"""Pose extraction tools."""
-

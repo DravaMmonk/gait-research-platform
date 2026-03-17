@@ -8,16 +8,3 @@ __pycache__/
 .hf/
 frontend/research_console/node_modules/
 frontend/research_console/.next/
-
-gait_research_platform/data/videos/
-gait_research_platform/data/poses/
-gait_research_platform/data/signals/
-gait_research_platform/data/embeddings/
-gait_research_platform/results/
-
-!gait_research_platform/data/.gitkeep
-!gait_research_platform/data/videos/.gitkeep
-!gait_research_platform/data/poses/.gitkeep
-!gait_research_platform/data/signals/.gitkeep
-!gait_research_platform/data/embeddings/.gitkeep
-!gait_research_platform/results/.gitkeep

@@ -13,6 +13,7 @@ class ResearchGraphState(TypedDict, total=False):
     goal: str
     session_id: str
     manifest: dict
+    execution_plan: dict
     video_asset_id: str
     run_id: str
     run_status: str
@@ -57,7 +58,8 @@ class ResearchGraph:
 
     def _planner_node(self, state: ResearchGraphState) -> ResearchGraphState:
         manifest = self.planner.plan(goal=state["goal"])
-        return {"manifest": manifest.model_dump(mode="json")}
+        execution_plan = self.planner.plan_execution(goal=state["goal"], input_asset_ids=state.get("input_asset_ids"))
+        return {"manifest": manifest.model_dump(mode="json"), "execution_plan": execution_plan.model_dump(mode="json")}
 
     def _select_video_asset_node(self, state: ResearchGraphState) -> ResearchGraphState:
         response = self.tools.call("list_session_videos", session_id=state["session_id"])
@@ -66,10 +68,23 @@ class ResearchGraph:
             raise ValueError("Runtime validation mode requires one uploaded video before agent execution.")
         manifest = dict(state["manifest"])
         manifest["input_asset_ids"] = [videos[0]["asset_id"]]
-        return {"manifest": manifest, "video_asset_id": videos[0]["asset_id"]}
+        execution_plan = dict(state["execution_plan"])
+        for stage in execution_plan.get("stages", []):
+            invocation = stage.get("tool_invocation")
+            if invocation is None:
+                continue
+            if invocation.get("input_asset_id") is not None or stage.get("name") in {"decode_video", "extract_keypoints"}:
+                invocation["input_asset_id"] = videos[0]["asset_id"]
+        return {"manifest": manifest, "execution_plan": execution_plan, "video_asset_id": videos[0]["asset_id"]}
 
     def _create_run_node(self, state: ResearchGraphState) -> ResearchGraphState:
-        response = self.tools.call("create_run", session_id=state["session_id"], manifest=state["manifest"])
+        response = self.tools.call(
+            "create_run",
+            session_id=state["session_id"],
+            manifest=state["manifest"],
+            execution_plan=state["execution_plan"],
+            run_kind="agent_analysis",
+        )
         return {"run_id": response.resource_id, "run_data": response.data}
 
     def _enqueue_run_node(self, state: ResearchGraphState) -> ResearchGraphState:
@@ -93,8 +108,8 @@ class ResearchGraph:
         results = state.get("metrics", {}).get("metric_results", [])
         metric_map = {item["name"]: item["value"] for item in results}
         recommendation = (
-            "Dummy runtime validation result: compare this fake asymmetry score against another uploaded video before connecting a real CV model."
+            "Agent tool-chain result: compare this asymmetry score against another uploaded video before connecting a production CV model."
             if metric_map.get("asymmetry_index", 0) > 0.6
-            else "Dummy runtime validation result: the fake metrics are stable enough to proceed to a real worker integration test with the same run contract."
+            else "Agent tool-chain result: the current modular tool chain is stable enough to proceed to a real worker integration test."
         )
         return {"recommendation": recommendation}

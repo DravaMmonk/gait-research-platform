@@ -65,6 +65,7 @@ class ReviewVerdict(StrEnum):
 class ExecutionStageType(StrEnum):
     PLACEHOLDER_PIPELINE = "placeholder_pipeline"
     RESEARCH_TOOL = "research_tool"
+    AGENT_TOOL = "agent_tool"
     FORMULA_EVALUATOR = "formula_evaluator"
 
 

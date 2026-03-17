@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from hound_forward.application import ResearchPlatformService
-from hound_forward.domain import ExperimentManifest, ToolResponse
+from hound_forward.domain import ExecutionPlan, ExperimentManifest, RunKind, ToolResponse
 
 
 class ToolRegistry:
@@ -30,8 +30,19 @@ class ToolRegistry:
     def names(self) -> list[str]:
         return sorted(self._tools)
 
-    def _create_run(self, session_id: str, manifest: dict[str, Any]) -> ToolResponse:
-        return self.service.tool_create_run(session_id=session_id, manifest=ExperimentManifest.model_validate(manifest))
+    def _create_run(
+        self,
+        session_id: str,
+        manifest: dict[str, Any],
+        execution_plan: dict[str, Any] | None = None,
+        run_kind: str = "pipeline",
+    ) -> ToolResponse:
+        return self.service.tool_create_run(
+            session_id=session_id,
+            manifest=ExperimentManifest.model_validate(manifest),
+            execution_plan=None if execution_plan is None else ExecutionPlan.model_validate(execution_plan),
+            run_kind=RunKind(run_kind),
+        )
 
     def _list_session_videos(self, session_id: str) -> ToolResponse:
         videos = [item.model_dump(mode="json") for item in self.service.list_session_videos(session_id)]

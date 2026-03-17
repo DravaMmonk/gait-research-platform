@@ -8,20 +8,21 @@ from pydantic import BaseModel, Field
 from hound_forward.adapters.metadata.azure_postgres import AzurePostgresMetadataRepository
 from hound_forward.adapters.queue.in_memory import InMemoryJobQueue
 from hound_forward.adapters.storage.local import LocalArtifactStore
-from hound_forward.adapters.tool_runner import LocalResearchToolRunner
+from hound_forward.agent_tools import AgentToolExecutor
 from hound_forward.agent_system.graphs.research_graph import ResearchGraph
 from hound_forward.agent_system.planners.experiment_planner import ExperimentManifestPlanner
 from hound_forward.agent_system.tools.registry import ToolRegistry
 from hound_forward.application import ResearchPlatformService, ServiceContainer
 from hound_forward.domain import (
     ConsoleAgentRequest,
+    ExecutionPlan,
     ExperimentManifest,
     FormulaStatus,
     ReviewEvidenceBundle,
     ReviewVerdict,
     RunKind,
 )
-from hound_forward.pipeline import DummyRuntimeValidationPipeline, PlatformRunExecutor
+from hound_forward.pipeline import PlatformRunExecutor
 from hound_forward.settings import PlatformSettings
 
 
@@ -35,6 +36,7 @@ class RunCreateRequest(BaseModel):
     session_id: str
     manifest: ExperimentManifest
     run_kind: RunKind = RunKind.PIPELINE
+    execution_plan: ExecutionPlan | None = None
 
 
 class AgentPlanRequest(BaseModel):
@@ -81,9 +83,8 @@ def build_service() -> ResearchPlatformService:
     metadata.create_all()
     artifact_store = LocalArtifactStore(settings.artifact_root_path())
     queue = InMemoryJobQueue()
-    tool_runner = LocalResearchToolRunner(artifact_store=artifact_store, work_root=settings.artifact_root_path() / "tool_runs")
-    dummy_pipeline = DummyRuntimeValidationPipeline(artifact_store=artifact_store, metadata=metadata)
-    executor = PlatformRunExecutor(dummy_pipeline=dummy_pipeline, tool_runner=tool_runner)
+    tool_runner = AgentToolExecutor(artifact_store=artifact_store, work_root=settings.artifact_root_path() / "tool_runs")
+    executor = PlatformRunExecutor(metadata=metadata, tool_runner=tool_runner)
     return ResearchPlatformService(
         ServiceContainer(metadata=metadata, artifact_store=artifact_store, queue=queue, executor=executor, tool_runner=tool_runner)
     )
@@ -92,7 +93,10 @@ def build_service() -> ResearchPlatformService:
 @lru_cache(maxsize=1)
 def build_graph() -> ResearchGraph:
     service = build_service()
-    planner = ExperimentManifestPlanner(default_runner=PlatformSettings().default_runner)
+    planner = ExperimentManifestPlanner(
+        default_runner=PlatformSettings().default_runner,
+        available_tools=service.container.tool_runner.describe_tools() if service.container.tool_runner else [],
+    )
     tools = ToolRegistry(service)
     return ResearchGraph(planner=planner, tools=tools)
 
@@ -142,7 +146,12 @@ def create_app() -> FastAPI:
     @app.post("/runs")
     def create_run(request: RunCreateRequest) -> dict:
         try:
-            run = service.create_run(session_id=request.session_id, manifest=request.manifest, run_kind=request.run_kind)
+            run = service.create_run(
+                session_id=request.session_id,
+                manifest=request.manifest,
+                run_kind=request.run_kind,
+                execution_plan=request.execution_plan,
+            )
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return run.model_dump(mode="json")
@@ -260,8 +269,13 @@ def create_app() -> FastAPI:
 
     @app.post("/agent/plan")
     def agent_plan(request: AgentPlanRequest) -> dict:
-        manifest = ExperimentManifestPlanner(default_runner=PlatformSettings().default_runner).plan(goal=request.goal)
-        return manifest.model_dump(mode="json")
+        planner = ExperimentManifestPlanner(
+            default_runner=PlatformSettings().default_runner,
+            available_tools=service.container.tool_runner.describe_tools() if service.container.tool_runner else [],
+        )
+        manifest = planner.plan(goal=request.goal)
+        execution_plan = planner.plan_execution(goal=request.goal)
+        return {"manifest": manifest.model_dump(mode="json"), "execution_plan": execution_plan.model_dump(mode="json")}
 
     @app.post("/agent/execute-plan")
     def agent_execute_plan(request: AgentPlanRequest) -> dict:

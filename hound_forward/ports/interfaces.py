@@ -167,3 +167,6 @@ class ToolRunner(ABC):
         run_id: str,
         config: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], AssetRecord]: ...
+
+    @abstractmethod
+    def describe_tools(self) -> list[dict[str, str]]: ...
