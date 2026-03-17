@@ -1,27 +1,54 @@
 :root {
-  --background: #ffffff;
-  --foreground: #0f1720;
-  --panel: #ffffff;
-  --panel-strong: #ffffff;
-  --panel-muted: #f7f7f8;
-  --muted-foreground: #667085;
-  --border: #e5e7eb;
-  --border-strong: rgba(112, 134, 72, 0.28);
-  --primary: #708648;
-  --primary-strong: #5c6f3b;
-  --accent: #c36f43;
-  --ring: #708648;
+  --background: 0 0% 100%;
+  --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 10% 3.9%;
+  --primary: 85 24% 45%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 4.8% 95.9%;
+  --secondary-foreground: 240 5.9% 10%;
+  --muted: 240 4.8% 95.9%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --accent: 240 4.8% 95.9%;
+  --accent-foreground: 240 5.9% 10%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 5.9% 90%;
+  --input: 240 5.9% 90%;
+  --ring: 85 24% 45%;
+  --sidebar-background: 0 0% 98%;
+  --sidebar-foreground: 240 5.3% 26.1%;
+  --sidebar-primary: 85 24% 45%;
+  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-accent: 240 4.8% 95.9%;
+  --sidebar-accent-foreground: 240 5.9% 10%;
+  --sidebar-border: 220 13% 91%;
+  --sidebar-ring: 85 24% 45%;
   --radius: 0.5rem;
   --chart-grid: #e5e7eb;
   --chart-reference: #94a3b8;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --copilot-kit-primary-color: #708648;
+  --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 16px 40px rgba(16, 24, 40, 0.12);
+  --panel: hsl(var(--card));
+  --panel-strong: hsl(var(--card));
+  --panel-muted: hsl(var(--muted));
+  --panel-subtle: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--muted) / 0.35) 100%);
+  --panel-border: hsl(var(--border) / 0.7);
+  --panel-border-strong: hsl(var(--primary) / 0.28);
+  --primary-solid: hsl(var(--primary));
+  --primary-strong: hsl(var(--primary) / 0.88);
+  --foreground-solid: hsl(var(--foreground));
+  --muted-foreground-solid: hsl(var(--muted-foreground));
+  --copilot-kit-primary-color: hsl(var(--primary));
   --copilot-kit-contrast-color: #ffffff;
-  --copilot-kit-background-color: #ffffff;
-  --copilot-kit-input-background-color: #f7f7f8;
-  --copilot-kit-secondary-color: #ffffff;
-  --copilot-kit-secondary-contrast-color: #0f1720;
-  --copilot-kit-separator-color: #e5e7eb;
+  --copilot-kit-background-color: hsl(var(--background));
+  --copilot-kit-input-background-color: hsl(var(--muted));
+  --copilot-kit-secondary-color: hsl(var(--card));
+  --copilot-kit-secondary-contrast-color: hsl(var(--foreground));
+  --copilot-kit-separator-color: hsl(var(--border));
   --copilot-kit-muted-color: #98a2b3;
   --copilot-kit-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
   --copilot-kit-shadow-md: 0 8px 24px rgba(16, 24, 40, 0.08);
@@ -40,8 +67,10 @@ body {
 
 body {
   min-height: 100vh;
-  color: var(--foreground);
-  background: var(--background);
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(circle at top left, hsl(var(--primary) / 0.08), transparent 22rem),
+    linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--sidebar-background)) 100%);
   font-family: Inter, system-ui, sans-serif;
   font-feature-settings: "rlig" 1, "calt" 1;
 }
@@ -79,9 +108,9 @@ textarea {
 .hound-chat-card,
 .hound-loading-card {
   min-width: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--panel-border);
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--panel-subtle);
   box-shadow: var(--shadow);
 }
 
@@ -119,9 +148,9 @@ textarea {
 .module-card,
 .agent-panel {
   min-width: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--panel-border);
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--panel-subtle);
   box-shadow: var(--shadow);
 }
 
@@ -177,10 +206,10 @@ textarea {
 .view-library-segment {
   width: 100%;
   text-align: left;
-  border: 1px solid var(--border);
+  border: 1px solid var(--panel-border);
   border-radius: var(--radius);
-  background: var(--panel-muted);
-  color: var(--foreground);
+  background: hsl(var(--background) / 0.72);
+  color: hsl(var(--foreground));
   padding: 14px;
   display: grid;
   gap: 4px;
@@ -193,14 +222,15 @@ textarea {
 }
 
 .view-library-segment small {
-  color: var(--muted-foreground);
+  color: var(--muted-foreground-solid);
   font-size: 0.82rem;
   line-height: 1.45;
 }
 
 .view-library-segment-active {
-  border-color: var(--border-strong);
-  background: rgba(112, 134, 72, 0.08);
+  border-color: var(--panel-border-strong);
+  background: linear-gradient(180deg, hsl(var(--primary) / 0.12), hsl(var(--background) / 0.92));
+  box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.06);
 }
 
 .view-library-filter-stack {
@@ -217,18 +247,18 @@ textarea {
 .view-library-input,
 .view-library-select {
   width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--panel-border);
   border-radius: var(--radius);
-  background: var(--panel-muted);
-  color: var(--foreground);
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
   padding: 12px 14px;
   outline: none;
 }
 
 .view-library-input:focus,
 .view-library-select:focus {
-  border-color: var(--border-strong);
-  box-shadow: 0 0 0 3px rgba(112, 134, 72, 0.14);
+  border-color: var(--panel-border-strong);
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.14);
 }
 
 .view-library-list {
@@ -242,18 +272,19 @@ textarea {
 .view-library-list-item {
   width: 100%;
   text-align: left;
-  border: 1px solid var(--border);
+  border: 1px solid var(--panel-border);
   border-radius: var(--radius);
-  background: var(--panel);
-  color: var(--foreground);
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
   padding: 14px;
   display: grid;
   gap: 10px;
+  box-shadow: var(--shadow);
 }
 
 .view-library-list-item-active {
-  border-color: var(--border-strong);
-  background: rgba(112, 134, 72, 0.06);
+  border-color: var(--panel-border-strong);
+  background: linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--primary) / 0.06) 100%);
 }
 
 .view-library-list-copy,
@@ -267,13 +298,13 @@ textarea {
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--foreground);
+  color: hsl(var(--foreground));
 }
 
 .view-library-list-summary,
 .view-library-list-status {
   margin: 0;
-  color: var(--muted-foreground);
+  color: var(--muted-foreground-solid);
   line-height: 1.55;
 }
 
@@ -332,7 +363,7 @@ textarea {
 
 .view-library-meta-item dt {
   margin: 0;
-  color: var(--muted-foreground);
+  color: var(--muted-foreground-solid);
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: 0.69rem;
@@ -341,7 +372,7 @@ textarea {
 
 .view-library-meta-item dd {
   margin: 0;
-  color: var(--foreground);
+  color: hsl(var(--foreground));
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
@@ -369,7 +400,7 @@ textarea {
   justify-items: start;
   gap: 8px;
   padding: 24px;
-  border: 1px dashed var(--border);
+  border: 1px dashed hsl(var(--border));
   border-radius: var(--radius);
   background: var(--panel-muted);
 }
@@ -382,9 +413,9 @@ textarea {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--panel-muted);
+  border-radius: calc(var(--radius) - 2px);
+  border: 1px solid var(--panel-border);
+  background: hsl(var(--background) / 0.82);
   color: var(--primary-strong);
   max-width: 360px;
   font-size: 0.82rem;
@@ -395,7 +426,7 @@ textarea {
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  background: var(--primary);
+  background: var(--primary-solid);
   flex: none;
 }
 
@@ -403,7 +434,7 @@ textarea {
 .module-kicker,
 .module-subtle {
   margin: 0;
-  color: var(--muted-foreground);
+  color: var(--muted-foreground-solid);
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: 0.69rem;
@@ -415,25 +446,26 @@ textarea {
 .agent-panel-title {
   margin: 0;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.025em;
   line-height: 1.1;
+  color: hsl(var(--foreground));
 }
 
 .agent-title {
-  font-size: clamp(2rem, 3vw, 2.8rem);
+  font-size: clamp(1.85rem, 2.4vw, 2.2rem);
   margin-top: 8px;
 }
 
 .module-title,
 .agent-panel-title {
-  font-size: 1.125rem;
+  font-size: 1.05rem;
   margin-top: 8px;
 }
 
 .agent-subtitle,
 .module-copy {
   margin: 0;
-  color: var(--muted-foreground);
+  color: var(--muted-foreground-solid);
   line-height: 1.65;
   overflow-wrap: anywhere;
 }
@@ -443,7 +475,7 @@ textarea {
   border: 0;
   background: var(--panel);
   box-shadow: none;
-  color: var(--foreground);
+  color: hsl(var(--foreground));
   font-family: Inter, system-ui, sans-serif;
 }
 
@@ -451,9 +483,9 @@ textarea {
   height: 60px;
   padding-left: 20px;
   padding-right: 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid hsl(var(--border));
   background: var(--panel);
-  color: var(--foreground);
+  color: hsl(var(--foreground));
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -461,7 +493,7 @@ textarea {
 
 .hound-chat .copilotKitMessages {
   min-height: 0;
-  background: var(--panel);
+  background: transparent;
 }
 
 .hound-chat .copilotKitMessagesContainer {
@@ -473,27 +505,27 @@ textarea {
   width: 100%;
   margin: 0;
   padding: 12px 20px 16px;
-  background: var(--panel);
+  background: transparent;
 }
 
 .hound-chat .copilotKitMessage {
-  border-radius: calc(var(--radius) + 2px);
-  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 1px);
+  border: 1px solid var(--panel-border);
   box-shadow: none;
 }
 
 .hound-chat .copilotKitMessage.copilotKitUserMessage {
   max-width: 52rem;
-  background: rgba(112, 134, 72, 0.08);
-  border-color: rgba(112, 134, 72, 0.22);
-  color: var(--foreground);
+  background: hsl(var(--primary) / 0.08);
+  border-color: hsl(var(--primary) / 0.22);
+  color: hsl(var(--foreground));
   padding: 14px 16px;
 }
 
 .hound-chat .copilotKitMessage.copilotKitAssistantMessage {
   max-width: 52rem;
-  background: var(--panel-muted);
-  color: var(--foreground);
+  background: hsl(var(--muted) / 0.92);
+  color: hsl(var(--foreground));
   padding: 14px 16px;
 }
 
@@ -506,28 +538,28 @@ textarea {
   width: 100%;
   min-height: 92px;
   margin: 0;
-  border-radius: calc(var(--radius) + 2px);
-  border: 1px solid var(--border);
-  background: var(--panel-muted);
+  border-radius: calc(var(--radius) - 1px);
+  border: 1px solid var(--panel-border);
+  background: hsl(var(--background));
   padding: 14px 16px;
 }
 
 .hound-chat .copilotKitInput > textarea {
   font-size: 0.95rem;
   line-height: 1.65;
-  color: var(--foreground);
+  color: hsl(var(--foreground));
 }
 
 .hound-chat .copilotKitInput > textarea::placeholder {
-  color: var(--muted-foreground);
+  color: var(--muted-foreground-solid);
 }
 
 .hound-chat .copilotKitInputControlButton:not([disabled]) {
-  color: var(--primary);
+  color: var(--primary-solid);
 }
 
 .hound-chat .copilotKitMessageControlButton {
-  color: var(--primary);
+  color: var(--primary-solid);
 }
 
 .hound-chat .copilotKitMessage.copilotKitAssistantMessage .copilotKitMessageControls {
@@ -542,9 +574,9 @@ textarea {
 }
 
 .hound-chat .suggestion {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--panel-muted);
+  border: 1px solid var(--panel-border);
+  border-radius: calc(var(--radius) - 2px);
+  background: hsl(var(--background));
   color: var(--primary-strong);
   padding: 0;
 }
@@ -574,8 +606,8 @@ textarea {
 }
 
 .module-subcard {
-  border: 1px solid var(--border);
-  background: var(--panel-muted);
+  border: 1px solid var(--panel-border);
+  background: hsl(var(--background) / 0.78);
   border-radius: var(--radius);
   padding: 12px;
 }
@@ -583,13 +615,13 @@ textarea {
 .module-pill {
   display: inline-flex;
   align-items: center;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--panel-muted);
-  color: var(--primary-strong);
-  padding: 5px 9px;
+  border-radius: calc(var(--radius) - 2px);
+  border: 1px solid var(--panel-border);
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  padding: 4px 8px;
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .module-code {
@@ -605,16 +637,16 @@ textarea {
 
 .ui-panel {
   padding: 1rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--panel-border);
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--panel-subtle);
 }
 
 .ui-section {
   min-width: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--panel-border);
   border-radius: var(--radius);
-  background: var(--panel-muted);
+  background: hsl(var(--background) / 0.72);
   padding: 0.95rem 1rem;
 }
 
@@ -664,12 +696,44 @@ textarea {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: hsl(var(--border));
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #cbd5e1;
+}
+
+.ui-ops-panel {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  background: var(--panel-subtle);
+  box-shadow: var(--shadow);
+}
+
+.ui-ops-section {
+  border: 1px solid hsl(var(--border) / 0.6);
+  border-radius: calc(var(--radius) - 1px);
+  background: hsl(var(--background) / 0.78);
+}
+
+.ui-ops-label {
+  margin: 0;
+  color: var(--muted-foreground-solid);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.69rem;
+  font-weight: 600;
+}
+
+.ui-ops-value {
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 @media (max-width: 1080px) {

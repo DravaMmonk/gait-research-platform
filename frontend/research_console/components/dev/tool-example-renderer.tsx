@@ -11,7 +11,7 @@ export function ToolExampleRenderer({ entry }: { entry: ToolLibraryEntry }) {
         action={<span className="module-pill">{entry.status}</span>}
       />
 
-      <section className="agent-panel">
+      <section className="agent-panel ui-ops-panel">
         <div className="view-library-overview">
           <div className="ui-stable-fill">
             <p className="agent-kicker">Category</p>
@@ -24,7 +24,7 @@ export function ToolExampleRenderer({ entry }: { entry: ToolLibraryEntry }) {
         </div>
       </section>
 
-      <section className="agent-panel">
+      <section className="agent-panel ui-ops-panel">
         <p className="agent-kicker">Contract</p>
         <ViewLibraryMetaList
           items={[

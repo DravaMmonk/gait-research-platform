@@ -1,5 +1,5 @@
-import { CopilotAgentConsole } from "@/components/console/copilot-agent-console";
+import { HomeConsoleShell } from "@/components/console/home-console-shell";
 
 export default function HomePage() {
-  return <CopilotAgentConsole />;
+  return <HomeConsoleShell />;
 }

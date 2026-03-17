@@ -13,9 +13,20 @@ import { Observable } from "rxjs";
 
 import { getHoundForwardApiBase } from "@/lib/hound-forward-api";
 
-type ConsoleResponsePayload = {
-  message?: string;
-  thread?: Array<{ role: string; content: string }>;
+type ChatResponsePayload = {
+  type: "text" | "run" | "error";
+  message: string;
+  run_id?: string;
+  progress_messages?: string[];
+  structured_data?: Record<string, unknown>;
+};
+
+type RunFinishedResult = {
+  status: "completed";
+  threadId: string;
+  runId: string;
+  message: string;
+  output: ChatResponsePayload;
 };
 
 function flattenMessageContent(content: Message["content"]): string {
@@ -46,18 +57,6 @@ function getLatestUserMessage(messages: Message[]): string {
   return flattenMessageContent(latest?.content).trim();
 }
 
-function getAssistantReply(payload: ConsoleResponsePayload): string {
-  if (payload.message?.trim()) {
-    return payload.message.trim();
-  }
-
-  const assistantMessage = [...(payload.thread ?? [])]
-    .reverse()
-    .find((message) => message.role === "assistant" && message.content.trim());
-
-  return assistantMessage?.content?.trim() || "No response.";
-}
-
 class HoundForwardAgent extends AbstractAgent {
   run(input: RunAgentInput): Observable<BaseEvent> {
     return new Observable<BaseEvent>((subscriber) => {
@@ -74,13 +73,13 @@ class HoundForwardAgent extends AbstractAgent {
 
       void (async () => {
         try {
-          const response = await fetch(`${getHoundForwardApiBase()}/agent/console/respond`, {
+          const response = await fetch(`${getHoundForwardApiBase()}/api/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               session_id: threadId,
               message: userMessage,
-              display_preferences: [],
+              context: {},
             }),
             cache: "no-store",
           });
@@ -89,9 +88,25 @@ class HoundForwardAgent extends AbstractAgent {
             throw new Error(`Hound Forward responded with ${response.status}.`);
           }
 
-          const payload = (await response.json()) as ConsoleResponsePayload;
-          const reply = getAssistantReply(payload);
-
+          const payload = (await response.json()) as ChatResponsePayload;
+          const progressMessages = payload.progress_messages ?? [];
+          for (const progress of progressMessages) {
+            const progressMessageId = crypto.randomUUID();
+            subscriber.next({
+              type: EventType.TEXT_MESSAGE_START,
+              messageId: progressMessageId,
+              role: "assistant",
+            });
+            subscriber.next({
+              type: EventType.TEXT_MESSAGE_CONTENT,
+              messageId: progressMessageId,
+              delta: progress,
+            });
+            subscriber.next({
+              type: EventType.TEXT_MESSAGE_END,
+              messageId: progressMessageId,
+            });
+          }
           subscriber.next({
             type: EventType.TEXT_MESSAGE_START,
             messageId,
@@ -100,7 +115,7 @@ class HoundForwardAgent extends AbstractAgent {
           subscriber.next({
             type: EventType.TEXT_MESSAGE_CONTENT,
             messageId,
-            delta: reply,
+            delta: payload.message,
           });
           subscriber.next({
             type: EventType.TEXT_MESSAGE_END,
@@ -110,6 +125,13 @@ class HoundForwardAgent extends AbstractAgent {
             type: EventType.RUN_FINISHED,
             threadId,
             runId,
+            result: {
+              status: "completed",
+              threadId,
+              runId,
+              message: payload.message,
+              output: payload,
+            } satisfies RunFinishedResult,
           });
           subscriber.complete();
         } catch (error) {

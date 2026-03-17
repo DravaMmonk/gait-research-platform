@@ -35,7 +35,7 @@ function ModuleExampleRenderer({ entry }: { entry: ModuleLibraryEntry }) {
         action={<span className="module-pill">{entry.status}</span>}
       />
 
-      <section className="agent-panel">
+      <section className="agent-panel ui-ops-panel">
         <div className="view-library-overview">
           <div className="ui-stable-fill">
             <p className="agent-kicker">Category</p>
@@ -48,7 +48,7 @@ function ModuleExampleRenderer({ entry }: { entry: ModuleLibraryEntry }) {
         </div>
       </section>
 
-      <section className="agent-panel">
+      <section className="agent-panel ui-ops-panel">
         <p className="agent-kicker">Rendering contract</p>
         <ViewLibraryMetaList
           items={[
@@ -111,12 +111,12 @@ export function DevViewLibrary() {
   return (
     <main className="agent-shell">
       <section className="agent-frame view-library-frame">
-        <header className="agent-header">
+        <header className="agent-header ui-ops-panel">
           <div className="ui-stable-fill">
             <p className="agent-kicker">Developer</p>
             <h1 className="agent-title">View library</h1>
             <p className="agent-subtitle view-library-page-copy">
-              Internal reference for the controlled frontend modules and executor-backed tool contracts.
+              Internal reference for the shared visual module contracts and executor-backed agent tools.
             </p>
           </div>
           <div className="agent-status-card">
@@ -127,7 +127,7 @@ export function DevViewLibrary() {
 
         <section className="view-library-layout">
           <aside className="view-library-sidebar">
-            <section className="agent-panel view-library-sidebar-panel">
+            <section className="agent-panel ui-ops-panel view-library-sidebar-panel">
               <div className="view-library-segmented">
                 {viewLibrarySections.map((option) => (
                   <button
@@ -178,7 +178,7 @@ export function DevViewLibrary() {
               </div>
             </section>
 
-            <section className="agent-panel view-library-sidebar-panel view-library-list-panel">
+            <section className="agent-panel ui-ops-panel view-library-sidebar-panel view-library-list-panel">
               <div className="view-library-list">
                 {filteredEntries.length ? (
                   filteredEntries.map((entry) => (

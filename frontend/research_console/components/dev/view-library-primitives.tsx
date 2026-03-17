@@ -12,7 +12,7 @@ export function ViewLibrarySectionHeader({
   action?: ReactNode;
 }) {
   return (
-    <header className="agent-panel view-library-detail-header">
+    <header className="agent-panel ui-ops-panel view-library-detail-header">
       <div className="ui-stable-fill">
         <p className="agent-kicker">{eyebrow}</p>
         <h2 className="agent-panel-title">{title}</h2>
@@ -50,7 +50,7 @@ export function ViewLibraryMetaList({ items }: { items: Array<{ label: string; v
 
 export function ViewLibraryCodeBlock({ title, value }: { title: string; value: unknown }) {
   return (
-    <section className="agent-panel ui-stable-panel">
+    <section className="agent-panel ui-ops-panel ui-stable-panel">
       <p className="agent-kicker">{title}</p>
       <pre className="module-code view-library-code">{JSON.stringify(value, null, 2)}</pre>
     </section>
