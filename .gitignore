@@ -8,3 +8,4 @@ __pycache__/
 .hf/
 frontend/research_console/node_modules/
 frontend/research_console/.next/
+frontend/research_console/.next-pre16-cache-*/

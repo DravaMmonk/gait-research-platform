@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ModuleRenderer } from "@/components/console/module-renderer";
 import { ToolExampleRenderer } from "@/components/dev/tool-example-renderer";
 import {
@@ -89,24 +89,16 @@ export function DevViewLibrary() {
     });
   }, [category, entries, query, tag]);
 
-  const selectedEntry = filteredEntries.find((entry) => entry.id === selectedId) ?? filteredEntries[0] ?? null;
+  const resolvedSelectedId = filteredEntries.some((entry) => entry.id === selectedId) ? selectedId : (filteredEntries[0]?.id ?? "");
+  const selectedEntry = filteredEntries.find((entry) => entry.id === resolvedSelectedId) ?? null;
 
-  useEffect(() => {
+  function handleSectionChange(nextSection: ViewLibrarySection) {
+    setSection(nextSection);
+    setQuery("");
     setCategory("all");
     setTag("all");
-    setQuery("");
-  }, [section]);
-
-  useEffect(() => {
-    if (!filteredEntries.length) {
-      setSelectedId("");
-      return;
-    }
-
-    if (!filteredEntries.some((entry) => entry.id === selectedId)) {
-      setSelectedId(filteredEntries[0].id);
-    }
-  }, [filteredEntries, selectedId]);
+    setSelectedId("");
+  }
 
   return (
     <main className="agent-shell">
@@ -134,7 +126,7 @@ export function DevViewLibrary() {
                     key={option.id}
                     type="button"
                     className={section === option.id ? "view-library-segment view-library-segment-active" : "view-library-segment"}
-                    onClick={() => setSection(option.id)}
+                    onClick={() => handleSectionChange(option.id)}
                   >
                     <span>{option.label}</span>
                     <small>{option.description}</small>

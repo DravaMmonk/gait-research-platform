@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import { CopilotKitInspector, useCopilotKit } from "@copilotkitnext/react";
@@ -78,6 +79,71 @@ export function CopilotAgentConsole() {
   const [archivedSessionIds, setArchivedSessionIds] = useState<string[]>([]);
   const [isArchivedExpanded, setIsArchivedExpanded] = useState(false);
 
+  const setActiveSession = useCallback((sessionId: string, availableSessions: ConsoleSession[] = sessions) => {
+    setThreadId(sessionId);
+    if (sessionId) {
+      window.localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, sessionId);
+      const selected = availableSessions.find((session) => session.session_id === sessionId);
+      setStatus(selected ? `Current session: ${selected.title}` : `Current session: ${sessionId.slice(0, 8)}`);
+      return;
+    }
+    window.localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    setStatus("No active session");
+  }, [sessions]);
+
+  const refreshSessions = useCallback(async (preferredSessionId?: string) => {
+    const response = await fetch("/api/console/session", {
+      method: "GET",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error("Unable to refresh sessions.");
+    }
+    const payload = (await response.json()) as SessionListResponse;
+    const loadedSessions = sortSessionsByMostRecent(payload.sessions ?? []);
+    const storedArchivedIds = JSON.parse(window.localStorage.getItem(ARCHIVED_SESSION_STORAGE_KEY) ?? "[]") as unknown[];
+    const nextArchivedIds = storedArchivedIds
+      .filter((value): value is string => typeof value === "string")
+      .filter((sessionId) => loadedSessions.some((session) => session.session_id === sessionId));
+    setSessions(loadedSessions);
+    setArchivedSessionIds(nextArchivedIds);
+    window.localStorage.setItem(ARCHIVED_SESSION_STORAGE_KEY, JSON.stringify(nextArchivedIds));
+    const visibleSessions = loadedSessions.filter((session) => !nextArchivedIds.includes(session.session_id));
+    const nextSessionId =
+      preferredSessionId && visibleSessions.some((session) => session.session_id === preferredSessionId)
+        ? preferredSessionId
+        : visibleSessions[0]?.session_id ?? "";
+    setActiveSession(nextSessionId, loadedSessions);
+    return loadedSessions;
+  }, [setActiveSession]);
+
+  const createSession = useCallback(async (options?: { replaceStatus?: string }) => {
+    setIsBusy(true);
+    try {
+      const response = await fetch("/api/console/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to create a session.");
+      }
+
+      const payload = (await response.json()) as SessionCreateResponse;
+      if (!payload.session_id) {
+        throw new Error("Session creation response was incomplete.");
+      }
+
+      await refreshSessions(payload.session_id);
+      if (options?.replaceStatus) {
+        setStatus(options.replaceStatus);
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Unable to create a session.");
+    } finally {
+      setIsBusy(false);
+    }
+  }, [refreshSessions]);
+
   useEffect(() => {
     window.localStorage.removeItem("cpk:inspector:hidden");
     window.localStorage.removeItem("cpk:inspector:state");
@@ -124,77 +190,12 @@ export function CopilotAgentConsole() {
       }
     }
 
-    initialize();
+    void initialize();
 
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  function setActiveSession(sessionId: string, availableSessions: ConsoleSession[] = sessions) {
-    setThreadId(sessionId);
-    if (sessionId) {
-      window.localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, sessionId);
-      const selected = availableSessions.find((session) => session.session_id === sessionId);
-      setStatus(selected ? `Current session: ${selected.title}` : `Current session: ${sessionId.slice(0, 8)}`);
-      return;
-    }
-    window.localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
-    setStatus("No active session");
-  }
-
-  async function refreshSessions(preferredSessionId?: string) {
-    const response = await fetch("/api/console/session", {
-      method: "GET",
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      throw new Error("Unable to refresh sessions.");
-    }
-    const payload = (await response.json()) as SessionListResponse;
-    const loadedSessions = sortSessionsByMostRecent(payload.sessions ?? []);
-    const storedArchivedIds = JSON.parse(window.localStorage.getItem(ARCHIVED_SESSION_STORAGE_KEY) ?? "[]") as unknown[];
-    const nextArchivedIds = storedArchivedIds
-      .filter((value): value is string => typeof value === "string")
-      .filter((sessionId) => loadedSessions.some((session) => session.session_id === sessionId));
-    setSessions(loadedSessions);
-    setArchivedSessionIds(nextArchivedIds);
-    window.localStorage.setItem(ARCHIVED_SESSION_STORAGE_KEY, JSON.stringify(nextArchivedIds));
-    const visibleSessions = loadedSessions.filter((session) => !nextArchivedIds.includes(session.session_id));
-    const nextSessionId =
-      preferredSessionId && visibleSessions.some((session) => session.session_id === preferredSessionId)
-        ? preferredSessionId
-        : visibleSessions[0]?.session_id ?? "";
-    setActiveSession(nextSessionId, loadedSessions);
-    return loadedSessions;
-  }
-
-  async function createSession(options?: { replaceStatus?: string }) {
-    setIsBusy(true);
-    try {
-      const response = await fetch("/api/console/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!response.ok) {
-        throw new Error("Unable to create a session.");
-      }
-
-      const payload = (await response.json()) as SessionCreateResponse;
-      if (!payload.session_id) {
-        throw new Error("Session creation response was incomplete.");
-      }
-
-      await refreshSessions(payload.session_id);
-      if (options?.replaceStatus) {
-        setStatus(options.replaceStatus);
-      }
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unable to create a session.");
-    } finally {
-      setIsBusy(false);
-    }
-  }
+  }, [createSession, setActiveSession]);
 
   function archiveSession(sessionId: string) {
     const nextArchivedIds = archivedSessionIds.includes(sessionId) ? archivedSessionIds : [...archivedSessionIds, sessionId];
@@ -245,7 +246,14 @@ export function CopilotAgentConsole() {
               <div className="hound-sidebar-header">
                 <button type="button" className="hound-sidebar-brand-button" aria-label="Hound Forward">
                   <div className="hound-sidebar-brand-logo-frame">
-                    <img src="/houndforward_logo.png" alt="Hound Forward" className="hound-sidebar-brand-logo" />
+                    <Image
+                      src="/houndforward_logo.png"
+                      alt="Hound Forward"
+                      className="hound-sidebar-brand-logo"
+                      width={56}
+                      height={32}
+                      priority
+                    />
                   </div>
                   <div className="hound-sidebar-brand-copy">
                     <span className="hound-sidebar-brand-title">Hound Forward</span>
