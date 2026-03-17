@@ -7,6 +7,69 @@ from hound_forward.domain import ExecutionPlan, ExperimentManifest, RunKind, Too
 
 
 class ToolRegistry:
+    _SERVICE_TOOL_METADATA: dict[str, dict[str, str]] = {
+        "create_session": {
+            "description": "Create a research session before uploads or analysis runs.",
+            "input_kind": "request",
+            "output_kind": "session",
+            "scope": "platform_registry",
+        },
+        "create_run": {
+            "description": "Create a run from a validated manifest and optional execution plan.",
+            "input_kind": "manifest",
+            "output_kind": "run",
+            "scope": "platform_registry",
+        },
+        "get_run": {
+            "description": "Read the latest stored state for a single run.",
+            "input_kind": "run_id",
+            "output_kind": "run",
+            "scope": "platform_registry",
+        },
+        "list_runs": {
+            "description": "List runs that belong to a session.",
+            "input_kind": "session_id",
+            "output_kind": "run_list",
+            "scope": "platform_registry",
+        },
+        "read_metrics": {
+            "description": "Read metric results that were produced for a completed run.",
+            "input_kind": "run_id",
+            "output_kind": "metric_result",
+            "scope": "platform_registry",
+        },
+        "compare_runs": {
+            "description": "Compare summaries and metrics across multiple runs.",
+            "input_kind": "run_ids",
+            "output_kind": "comparison_report",
+            "scope": "platform_registry",
+        },
+        "list_session_videos": {
+            "description": "List uploaded video assets available in the current session.",
+            "input_kind": "session_id",
+            "output_kind": "video_list",
+            "scope": "platform_registry",
+        },
+        "enqueue_run": {
+            "description": "Queue a created run for execution by the worker bridge.",
+            "input_kind": "run_id",
+            "output_kind": "run",
+            "scope": "platform_registry",
+        },
+        "console_respond": {
+            "description": "Generate a console-style response for the current research context.",
+            "input_kind": "chat_request",
+            "output_kind": "console_response",
+            "scope": "platform_registry",
+        },
+        "visualize_pysr_manifest": {
+            "description": "Summarize a symbolic manifest for governance or review.",
+            "input_kind": "manifest",
+            "output_kind": "report",
+            "scope": "platform_registry",
+        },
+    }
+
     def __init__(self, service: ResearchPlatformService) -> None:
         self.service = service
         self._tools: dict[str, Callable[..., ToolResponse]] = {
@@ -29,6 +92,34 @@ class ToolRegistry:
 
     def names(self) -> list[str]:
         return sorted(self._tools)
+
+    def describe_tools(self) -> list[dict[str, str]]:
+        described_tools = [
+            {
+                "name": name,
+                **self._SERVICE_TOOL_METADATA.get(
+                    name,
+                    {
+                        "description": "Platform registry tool.",
+                        "input_kind": "unknown",
+                        "output_kind": "unknown",
+                        "scope": "platform_registry",
+                    },
+                ),
+            }
+            for name in sorted(self._tools)
+        ]
+        if self.service.container.tool_runner is None:
+            return described_tools
+
+        described_tools.extend(
+            {
+                **tool,
+                "scope": "graph_execution",
+            }
+            for tool in self.service.container.tool_runner.describe_tools()
+        )
+        return sorted(described_tools, key=lambda item: (item["scope"], item["name"]))
 
     def _create_run(
         self,

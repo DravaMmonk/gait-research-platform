@@ -105,17 +105,34 @@ class ChatOrchestrator:
     def _answer_question(self, *, session_id: str, message: str) -> ChatResponse:
         session = self.service.container.metadata.get_session(session_id)
         runs = self.service.list_runs(session_id=session_id)
+        available_tools = ToolRegistry(self.service).describe_tools()
         session_summary = {
             "session_id": session_id,
             "session_title": session.title if session is not None else "unknown",
             "run_count": len(runs),
             "latest_completed_run_id": next((run.run_id for run in reversed(runs) if run.status == RunStatus.COMPLETED), None),
+            "available_tool_count": len(available_tools),
         }
-        answer = self.reasoner.answer_question(message=message, session_summary=session_summary)
+        if self._is_tool_inventory_question(message):
+            answer = self.reasoner.describe_tools(
+                message=message,
+                session_summary=session_summary,
+                available_tools=available_tools,
+            )
+        else:
+            answer = self.reasoner.answer_question(
+                message=message,
+                session_summary=session_summary,
+                available_tools=available_tools,
+            )
         return ChatResponse(
             type=ChatResponseType.TEXT,
             message=answer,
-            structured_data={"intent": ChatIntent.ASK_QUESTION.value, "context": session_summary},
+            structured_data={
+                "intent": ChatIntent.ASK_QUESTION.value,
+                "context": session_summary,
+                "available_tools": available_tools,
+            },
         )
 
     def _build_planner(self) -> Any:
@@ -193,3 +210,19 @@ class ChatOrchestrator:
                 for index, stage in enumerate(run_detail.run.execution_plan.stages)
             )
         return items
+
+    @staticmethod
+    def _is_tool_inventory_question(message: str) -> bool:
+        normalized = message.lower()
+        inventory_markers = (
+            "what tools",
+            "which tools",
+            "available tools",
+            "callable tools",
+            "tool registry",
+            "what can you call",
+            "what can you use",
+            "capabilities",
+            "can you invoke",
+        )
+        return any(marker in normalized for marker in inventory_markers)

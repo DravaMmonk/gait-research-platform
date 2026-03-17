@@ -19,18 +19,54 @@ class ChatReasoner:
         self.model = model
         self.client = OpenAIResponsesJSONClient(model=model)
 
-    def answer_question(self, *, message: str, session_summary: dict[str, Any]) -> str:
+    def answer_question(
+        self,
+        *,
+        message: str,
+        session_summary: dict[str, Any],
+        available_tools: list[dict[str, Any]] | None = None,
+    ) -> str:
         fallback = f"Research agent answer: {message}"
         return self._complete_json(
             system_prompt=(
                 "Answer the user's research question clearly and directly.\n"
                 "You are a research agent assistant, not a casual chatbot.\n"
+                "If the user asks about tools or capabilities, rely only on the provided available_tools list.\n"
                 "Return JSON only with a single 'message' field."
             ),
-            user_prompt=f"Question: {message}\nSession summary: {session_summary}",
+            user_prompt=(
+                f"Question: {message}\n"
+                f"Session summary: {session_summary}\n"
+                f"Available tools: {available_tools or []}"
+            ),
             fallback=fallback,
             schema_name="general_question_response",
         )
+
+    def describe_tools(
+        self,
+        *,
+        message: str,
+        session_summary: dict[str, Any],
+        available_tools: list[dict[str, Any]],
+    ) -> str:
+        fallback = self._format_available_tools(available_tools)
+        answer = self._complete_json(
+            system_prompt=(
+                "Answer questions about the agent's callable tools using only the provided available_tools list.\n"
+                "Do not claim that you lack tool access when available_tools is not empty.\n"
+                "Group tools by scope when helpful and mention what each tool is for.\n"
+                "Return JSON only with a single 'message' field."
+            ),
+            user_prompt=(
+                f"Question: {message}\n"
+                f"Session summary: {session_summary}\n"
+                f"Available tools: {available_tools}"
+            ),
+            fallback=fallback,
+            schema_name="tool_inventory_response",
+        )
+        return answer if self._is_valid_tool_inventory_answer(answer, available_tools) else fallback
 
     def explain_result(self, *, message: str, result_payload: dict[str, Any]) -> str:
         fallback = (
@@ -60,3 +96,31 @@ class ChatReasoner:
         except Exception as exc:
             logger.warning("Reasoner fallback triggered: %s", exc)
             return fallback
+
+    @staticmethod
+    def _format_available_tools(available_tools: list[dict[str, Any]]) -> str:
+        if not available_tools:
+            return "No callable tools are currently registered for this research agent."
+
+        grouped_tools: dict[str, list[dict[str, Any]]] = {}
+        for tool in available_tools:
+            grouped_tools.setdefault(str(tool.get("scope", "unknown")), []).append(tool)
+
+        sections: list[str] = ["I can call the following registered tools:"]
+        for scope in sorted(grouped_tools):
+            tools = sorted(grouped_tools[scope], key=lambda item: str(item.get("name", "")))
+            label = "Graph execution tools" if scope == "graph_execution" else "Platform registry tools"
+            sections.append(f"{label}:")
+            for tool in tools:
+                sections.append(
+                    f"- {tool.get('name', 'unknown')}: {tool.get('description', 'No description available.')}"
+                )
+        return "\n".join(sections)
+
+    @staticmethod
+    def _is_valid_tool_inventory_answer(answer: str, available_tools: list[dict[str, Any]]) -> bool:
+        normalized = answer.lower()
+        if "do not have" in normalized or "don't have" in normalized or "no direct access" in normalized:
+            return False
+        tool_names = [str(tool.get("name", "")).lower() for tool in available_tools if tool.get("name")]
+        return any(tool_name in normalized for tool_name in tool_names)

@@ -21,11 +21,21 @@ from hound_forward.worker.runtime import PlaceholderLocalWorkerBridge
 
 def fake_openai_json_response(self, *, system_prompt, user_prompt, schema_name, schema):
     if schema_name == "intent_classification":
+        if "what tools can you call" in user_prompt.lower():
+            return {"intent": "ask_question"}
         if "what does this result mean" in user_prompt.lower():
             return {"intent": "explain_result"}
         if "stride length" in user_prompt.lower():
             return {"intent": "ask_question"}
         return {"intent": "run_analysis"}
+    if schema_name == "tool_inventory_response":
+        return {
+            "message": (
+                "I can call platform registry tools such as create_run and read_metrics, "
+                "and graph execution tools such as decode_video, extract_keypoints, "
+                "compute_gait_metrics, and generate_report."
+            )
+        }
     if schema_name == "general_question_response":
         return {"message": "Stride length is the distance covered in one stride cycle."}
     if schema_name == "result_explanation_response":
@@ -476,6 +486,41 @@ def test_api_chat_answers_question_without_run(tmp_path: Path, monkeypatch) -> N
     assert payload["type"] == "text"
     assert payload["run_id"] is None
     assert payload["message"] == "Stride length is the distance covered in one stride cycle."
+
+
+def test_api_chat_reports_registered_tools_for_tool_inventory_question(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'chat-tools.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "chat-tools-artifacts"))
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.intent_router.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.reasoner.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_graph.cache_clear()
+    app_module.build_chat_orchestrator.cache_clear()
+    client = TestClient(create_app())
+
+    session_response = client.post("/sessions", json={"title": "Tool inventory session"})
+    session = session_response.json()
+
+    response = client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "What tools can you call right now?"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["type"] == "text"
+    assert "create_run" in payload["message"]
+    assert "extract_keypoints" in payload["message"]
+    tool_names = {tool["name"] for tool in payload["structured_data"]["available_tools"]}
+    assert {"create_run", "read_metrics", "decode_video", "extract_keypoints"} <= tool_names
 
 
 def test_api_chat_explains_existing_run(tmp_path: Path, monkeypatch) -> None:
