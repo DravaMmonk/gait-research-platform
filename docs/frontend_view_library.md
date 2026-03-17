@@ -65,6 +65,17 @@ The view library intentionally reuses existing rendering code where possible:
 
 This keeps the reference surface close to the product implementation and reduces drift.
 
+## Current Implementation Shape
+
+The view library now sits on the same primitive layer as the public console:
+
+- shared low-level components live in `frontend/research_console/components/ui/`
+- Hound-specific panel and badge treatment are expressed through shared primitives rather than route-local CSS
+- search and filters use the same token-driven input and select components as the rest of the app
+- the detail pane still renders real module contracts through `ModuleRenderer`
+
+This keeps `/dev` useful as a real reference surface instead of a disconnected style sandbox.
+
 ## Hidden Route Policy
 
 The `/dev` route should remain:

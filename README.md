@@ -15,6 +15,7 @@ Hound Forward is now structured as an Azure-aligned, AI-native research platform
 - `db/schema.sql`: Azure PostgreSQL schema for metadata
 - `infra/azure/`: Bicep scaffold for Azure infrastructure
 - `frontend/research_console/`: Next.js research UI scaffold
+- `frontend/research_console/components/ui/`: shared `shadcn/ui`-style primitive layer aligned to Hound Forward tokens
 - `docs/`: platform architecture, agent architecture, deployment, and migration notes
 
 ## Core Model
@@ -104,6 +105,10 @@ cd frontend/research_console
 npm install
 npm run dev
 ```
+
+Frontend architecture notes live in:
+
+- [frontend/research_console/README.md](/Users/drava/Documents/Hound/hf-playground/frontend/research_console/README.md)
 
 ## Azure Deployment Shape
 

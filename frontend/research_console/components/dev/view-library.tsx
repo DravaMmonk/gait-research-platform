@@ -1,6 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { ModuleRenderer } from "@/components/console/module-renderer";
 import { ToolExampleRenderer } from "@/components/dev/tool-example-renderer";
 import {
@@ -27,29 +35,29 @@ function matchesQuery(entry: ViewLibraryEntry, query: string) {
 
 function ModuleExampleRenderer({ entry }: { entry: ModuleLibraryEntry }) {
   return (
-    <div className="view-library-detail-stack">
+    <div className="space-y-5">
       <ViewLibrarySectionHeader
         eyebrow="Visual Module"
         title={entry.title}
         summary={entry.summary}
-        action={<span className="module-pill">{entry.status}</span>}
+        action={<Badge variant="outline">{entry.status}</Badge>}
       />
 
-      <section className="agent-panel ui-ops-panel">
-        <div className="view-library-overview">
-          <div className="ui-stable-fill">
-            <p className="agent-kicker">Category</p>
-            <p className="view-library-value">{entry.category}</p>
+      <Panel tone="default" padding="roomy">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Category</p>
+            <p className="mt-2 text-lg font-semibold tracking-[-0.02em] text-foreground">{entry.category}</p>
           </div>
-          <div className="ui-stable-fill">
-            <p className="agent-kicker">Tags</p>
+          <div>
+            <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Tags</p>
             <ViewLibraryTagList tags={entry.tags} />
           </div>
         </div>
-      </section>
+      </Panel>
 
-      <section className="agent-panel ui-ops-panel">
-        <p className="agent-kicker">Rendering contract</p>
+      <Panel tone="default" padding="roomy">
+        <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Rendering contract</p>
         <ViewLibraryMetaList
           items={[
             { label: "Module type", value: entry.example.type },
@@ -57,7 +65,7 @@ function ModuleExampleRenderer({ entry }: { entry: ModuleLibraryEntry }) {
             { label: "Display title", value: entry.example.title },
           ]}
         />
-      </section>
+      </Panel>
 
       <ModuleRenderer module={entry.example} />
     </div>
@@ -70,6 +78,7 @@ export function DevViewLibrary() {
   const [category, setCategory] = useState("all");
   const [tag, setTag] = useState("all");
   const [selectedId, setSelectedId] = useState("");
+  const deferredQuery = useDeferredValue(query);
 
   const entries = useMemo(() => getViewLibraryEntries(section), [section]);
 
@@ -85,9 +94,9 @@ export function DevViewLibrary() {
     return entries.filter((entry) => {
       const matchesCategory = category === "all" || normalizeValue(entry.category) === normalizeValue(category);
       const matchesTag = tag === "all" || entry.tags.some((entryTag) => normalizeValue(entryTag) === normalizeValue(tag));
-      return matchesCategory && matchesTag && matchesQuery(entry, query);
+      return matchesCategory && matchesTag && matchesQuery(entry, deferredQuery);
     });
-  }, [category, entries, query, tag]);
+  }, [category, deferredQuery, entries, tag]);
 
   const resolvedSelectedId = filteredEntries.some((entry) => entry.id === selectedId) ? selectedId : (filteredEntries[0]?.id ?? "");
   const selectedEntry = filteredEntries.find((entry) => entry.id === resolvedSelectedId) ?? null;
@@ -101,44 +110,47 @@ export function DevViewLibrary() {
   }
 
   return (
-    <main className="agent-shell">
-      <section className="agent-frame view-library-frame">
-        <header className="agent-header ui-ops-panel">
-          <div className="ui-stable-fill">
-            <p className="agent-kicker">Developer</p>
-            <h1 className="agent-title">View library</h1>
-            <p className="agent-subtitle view-library-page-copy">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.08),transparent_24rem),linear-gradient(180deg,hsl(40_22%_98%)_0%,hsl(42_22%_95%)_48%,hsl(40_14%_92%)_100%)] px-4 py-6 sm:px-6">
+      <section className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-[1400px] flex-col gap-5">
+        <Panel tone="elevated" padding="roomy" className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Developer</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-foreground">View library</h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
               Internal reference for the shared visual module contracts and executor-backed agent tools.
             </p>
           </div>
-          <div className="agent-status-card">
-            <span className="agent-status-dot" />
-            <p>Hidden route</p>
-          </div>
-        </header>
+          <Badge variant="default" className="w-fit rounded-full px-3 py-1 text-[0.68rem] tracking-[0.14em]">
+            Hidden route
+          </Badge>
+        </Panel>
 
-        <section className="view-library-layout">
-          <aside className="view-library-sidebar">
-            <section className="agent-panel ui-ops-panel view-library-sidebar-panel">
-              <div className="view-library-segmented">
+        <section className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
+          <aside className="grid min-h-0 gap-5">
+            <Panel tone="default" padding="roomy" className="space-y-5">
+              <div className="grid gap-2">
                 {viewLibrarySections.map((option) => (
-                  <button
+                  <Button
                     key={option.id}
                     type="button"
-                    className={section === option.id ? "view-library-segment view-library-segment-active" : "view-library-segment"}
+                    variant={section === option.id ? "secondary" : "ghost"}
+                    className="h-auto w-full justify-start rounded-[0.95rem] px-4 py-3 text-left"
                     onClick={() => handleSectionChange(option.id)}
                   >
-                    <span>{option.label}</span>
-                    <small>{option.description}</small>
-                  </button>
+                    <span className="flex flex-col items-start gap-1">
+                      <span>{option.label}</span>
+                      <small className="text-xs font-medium text-muted-foreground">{option.description}</small>
+                    </span>
+                  </Button>
                 ))}
               </div>
 
-              <div className="view-library-filter-stack">
-                <label className="view-library-field">
-                  <span className="agent-kicker">Search</span>
-                  <input
-                    className="view-library-input"
+              <Separator />
+
+              <div className="grid gap-4">
+                <label className="grid gap-2">
+                  <span className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Search</span>
+                  <Input
                     type="search"
                     placeholder="Search entries"
                     value={query}
@@ -146,61 +158,83 @@ export function DevViewLibrary() {
                   />
                 </label>
 
-                <label className="view-library-field">
-                  <span className="agent-kicker">Category</span>
-                  <select className="view-library-select" value={category} onChange={(event) => setCategory(event.target.value)}>
-                    {categories.map((option) => (
-                      <option key={option} value={option}>
-                        {option === "all" ? "All categories" : option}
-                      </option>
-                    ))}
-                  </select>
+                <label className="grid gap-2">
+                  <span className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Category</span>
+                  <Select value={category} onValueChange={setCategory}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option === "all" ? "All categories" : option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </label>
 
-                <label className="view-library-field">
-                  <span className="agent-kicker">Tag</span>
-                  <select className="view-library-select" value={tag} onChange={(event) => setTag(event.target.value)}>
-                    {tags.map((option) => (
-                      <option key={option} value={option}>
-                        {option === "all" ? "All tags" : option}
-                      </option>
-                    ))}
-                  </select>
+                <label className="grid gap-2">
+                  <span className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Tag</span>
+                  <Select value={tag} onValueChange={setTag}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a tag" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tags.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option === "all" ? "All tags" : option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </label>
               </div>
-            </section>
+            </Panel>
 
-            <section className="agent-panel ui-ops-panel view-library-sidebar-panel view-library-list-panel">
-              <div className="view-library-list">
-                {filteredEntries.length ? (
-                  filteredEntries.map((entry) => (
-                    <button
-                      key={entry.id}
-                      type="button"
-                      className={selectedEntry?.id === entry.id ? "view-library-list-item view-library-list-item-active" : "view-library-list-item"}
-                      onClick={() => setSelectedId(entry.id)}
-                    >
-                      <div className="view-library-list-copy">
-                        <p className="view-library-list-title">{entry.title}</p>
-                        <p className="view-library-list-summary">{entry.summary}</p>
-                      </div>
-                      <div className="view-library-list-meta">
-                        <span className="module-pill">{entry.category}</span>
-                        <span className="view-library-list-status">{entry.status}</span>
-                      </div>
-                    </button>
-                  ))
-                ) : (
-                  <div className="agent-empty">
-                    <p className="agent-kicker">No matches</p>
-                    <p className="module-copy">Adjust the search, category, or tag filters.</p>
-                  </div>
-                )}
+            <Panel tone="default" padding="none" className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+              <div className="flex items-center justify-between gap-3 border-b border-[hsl(var(--border)/0.68)] px-5 py-4">
+                <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Entries</p>
+                <Badge variant="muted">{filteredEntries.length}</Badge>
               </div>
-            </section>
+              <ScrollArea className="min-h-0">
+                <div className="grid gap-2 p-3">
+                  {filteredEntries.length ? (
+                    filteredEntries.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        className={
+                          selectedEntry?.id === entry.id
+                            ? "rounded-[calc(var(--radius)+1px)] border border-[hsl(var(--primary)/0.3)] bg-[linear-gradient(180deg,hsl(var(--card))_0%,hsl(var(--primary)/0.08)_100%)] px-4 py-3 text-left shadow-panel"
+                            : "rounded-[calc(var(--radius)+1px)] border border-[hsl(var(--border)/0.68)] bg-[var(--panel-subtle)] px-4 py-3 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                        }
+                        onClick={() => setSelectedId(entry.id)}
+                      >
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-sm font-semibold tracking-[-0.02em] text-foreground">{entry.title}</p>
+                            <p className="mt-1 text-sm leading-6 text-muted-foreground">{entry.summary}</p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline">{entry.category}</Badge>
+                            <Badge variant="muted">{entry.status}</Badge>
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-4 py-5">
+                      <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">No matches</p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">Adjust the search, category, or tag filters.</p>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </Panel>
           </aside>
 
-          <section className="view-library-detail">
+          <section className="min-h-0">
             {selectedEntry ? (
               selectedEntry.kind === "module" ? (
                 <ModuleExampleRenderer entry={selectedEntry} />
@@ -208,10 +242,10 @@ export function DevViewLibrary() {
                 <ToolExampleRenderer entry={selectedEntry} />
               )
             ) : (
-              <div className="agent-empty">
-                <p className="agent-kicker">Empty library</p>
-                <p className="module-copy">No examples are available for the current section.</p>
-              </div>
+              <Panel tone="default" padding="roomy">
+                <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Empty library</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">No examples are available for the current section.</p>
+              </Panel>
             )}
           </section>
         </section>

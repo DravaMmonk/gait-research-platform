@@ -1,31 +1,33 @@
+import { Badge } from "@/components/ui/badge";
+import { Panel } from "@/components/ui/panel";
 import { ToolLibraryEntry } from "@/lib/view-library";
 import { ViewLibraryCodeBlock, ViewLibraryMetaList, ViewLibrarySectionHeader, ViewLibraryTagList } from "./view-library-primitives";
 
 export function ToolExampleRenderer({ entry }: { entry: ToolLibraryEntry }) {
   return (
-    <div className="view-library-detail-stack">
+    <div className="space-y-5">
       <ViewLibrarySectionHeader
         eyebrow="Agent Tool"
         title={entry.title}
         summary={entry.summary}
-        action={<span className="module-pill">{entry.status}</span>}
+        action={<Badge variant="outline">{entry.status}</Badge>}
       />
 
-      <section className="agent-panel ui-ops-panel">
-        <div className="view-library-overview">
-          <div className="ui-stable-fill">
-            <p className="agent-kicker">Category</p>
-            <p className="view-library-value">{entry.category}</p>
+      <Panel tone="default" padding="roomy">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Category</p>
+            <p className="mt-2 text-lg font-semibold tracking-[-0.02em] text-foreground">{entry.category}</p>
           </div>
-          <div className="ui-stable-fill">
-            <p className="agent-kicker">Tags</p>
+          <div>
+            <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Tags</p>
             <ViewLibraryTagList tags={entry.tags} />
           </div>
         </div>
-      </section>
+      </Panel>
 
-      <section className="agent-panel ui-ops-panel">
-        <p className="agent-kicker">Contract</p>
+      <Panel tone="default" padding="roomy">
+        <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Contract</p>
         <ViewLibraryMetaList
           items={[
             { label: "Input kind", value: entry.contract.inputKind },
@@ -34,9 +36,9 @@ export function ToolExampleRenderer({ entry }: { entry: ToolLibraryEntry }) {
             { label: "Source", value: <code>{entry.contract.source}</code> },
           ]}
         />
-      </section>
+      </Panel>
 
-      <div className="view-library-code-grid">
+      <div className="grid gap-5 xl:grid-cols-2">
         <ViewLibraryCodeBlock title="Example input" value={entry.contract.exampleInput} />
         <ViewLibraryCodeBlock title="Example output" value={entry.contract.exampleOutput} />
       </div>

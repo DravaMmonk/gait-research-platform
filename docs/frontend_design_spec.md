@@ -171,6 +171,37 @@ The previous serif-heavy hero scaffold is retired and should not be reintroduced
 - Reuse existing renderers and shared primitives instead of introducing preview-only forks
 - Avoid page-local hardcoded preview composition
 - Keep `/dev` hidden and non-executable
+- Keep global CSS limited to theme tokens, base browser rules, and third-party override seams such as CopilotKit
+- Prefer `shadcn/ui` primitives and Hound-specific wrappers over route-local component styling
+- Keep session state, persistence, and transport logic outside page shells
+- Preserve the separation between low-level primitives (`components/ui`), product features (`components/console`, `components/dev`), and shared state/helpers (`hooks`, `lib`)
+
+## Frontend Structure
+
+The current frontend structure is intentionally layered:
+
+1. `app/`
+   - route entry points and global design tokens
+2. `components/ui/`
+   - reusable `shadcn/ui`-style primitives aligned to Hound tokens
+3. `components/console/`
+   - Research Console shell, session navigation, chat frame, and contract renderers
+4. `components/dev/`
+   - hidden reference views for modules and tool contracts
+5. `hooks/`
+   - frontend state orchestration such as session loading and persistence
+6. `lib/`
+   - typed contracts, registries, transport helpers, and formatting utilities
+
+## Migration Outcome
+
+The console has been migrated away from a page-scale class system into a token-first component model:
+
+- Hound Forward colors, fonts, and radius language remain the visual source of truth
+- `shadcn/ui` primitives provide the reusable building blocks
+- the Research Console shell is split into independent sidebar, chat frame, and CopilotKit integration boundaries
+- `/dev` reuses the same primitive layer and contract renderer as the public surface
+- large global layout class blocks are retired in favor of local composition with shared primitives
 
 ## Review Checklist
 
