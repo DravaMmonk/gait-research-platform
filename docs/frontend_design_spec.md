@@ -6,6 +6,8 @@ This document defines the source of truth for the `frontend/research_console` ap
 
 The product is a chat-first agent console, not a generic dashboard and not a free-form chatbot. The public surface is the single chat route at `/`. The hidden `/dev` route is an internal reference library for controlled visual modules and backend tool contracts.
 
+The base design language for all `hf-playground` frontend surfaces is inherited from `hf-analytics/clinician_side`. New pages should treat that language as the default product standard unless there is an explicit reason to diverge.
+
 ## Product Model
 
 The research console follows this pattern:
@@ -151,12 +153,14 @@ Every clinically relevant or research-critical module should preserve enough con
 
 ## Styling Direction
 
-- Use a modern sans stack
+- Use the `hf-analytics clinician_side` token model as the default source of truth
+- Keep the HSL token system aligned with `background`, `foreground`, `card`, `muted`, `border`, `primary`, and `ring`
+- Use Inter for sans text and JetBrains Mono for code-like payloads
 - Keep a neutral research visual tone
-- Use green as the primary active accent
-- Use ember selectively for emphasis, not as the default interface color
+- Use olive green as the primary active accent
 - Prefer dense but readable panels over oversized decorative cards
-- Prefer light borders and light shadows over glass effects or oversized radii
+- Prefer low-radius cards, light borders, and light shadows over glass effects or oversized radii
+- Reuse the shared layout-stability utilities from `hf-analytics`, especially `ui-stable-*`
 
 The previous serif-heavy hero scaffold is retired and should not be reintroduced.
 

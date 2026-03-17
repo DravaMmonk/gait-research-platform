@@ -9,6 +9,8 @@ The hidden `/dev` route in `frontend/research_console` is an internal view libra
 
 It is not a second product surface and it does not execute live workflows.
 
+The page follows the same design standard as the public console and the broader `hf-playground` frontend. That standard is inherited from `hf-analytics/clinician_side`, including its token structure, card language, badge treatment, and layout-stability rules.
+
 ## Design Rationale
 
 The public route at `/` should stay focused on the end-user chat workflow. Development references still need a place to validate rendering contracts, visual consistency, and tool metadata. The hidden `/dev` route satisfies that need without leaking preview content into the public shell.
@@ -18,6 +20,7 @@ The route uses the same visual language as the public chat surface:
 - shared tokens from `app/globals.css`
 - the same panel, badge, border, and typography rules
 - fixed shell with internal scrolling
+- the `hf-analytics clinician_side` card and header rhythm
 
 ## Data Model
 

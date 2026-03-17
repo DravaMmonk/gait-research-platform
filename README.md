@@ -35,6 +35,7 @@ All experiment, metric evaluation, and agent analysis activity is modeled as a r
 The current runtime slice is an agent-designed modular tool chain, not a production CV pipeline.
 
 - `LangGraph planner`: selects the tool chain for a goal
+- `Chat orchestrator`: routes chat requests into execution, explanation, or direct answers
 - `Agent tools`: execute modular stages such as video decode, keypoint extraction, metrics, and reporting
 - `Local worker bridge`: drains queued runs so the same run contract can be exercised locally
 
@@ -88,6 +89,14 @@ Run the FastAPI service:
 uvicorn hound_forward.api.app:app --reload
 ```
 
+If you want to enable the real LLM-backed planner and chat orchestration, configure:
+
+```bash
+export OPENAI_API_KEY=...
+export HF_LLM_MODEL=gpt-4o-mini
+export HF_PLANNER_MODE=hybrid
+```
+
 Start the research console scaffold:
 
 ```bash
@@ -111,6 +120,7 @@ See:
 
 - [docs/platform_architecture.md](/Users/drava/Documents/Hound/hf-playground/docs/platform_architecture.md)
 - [docs/agent_architecture.md](/Users/drava/Documents/Hound/hf-playground/docs/agent_architecture.md)
+- [docs/chat_orchestration.md](/Users/drava/Documents/Hound/hf-playground/docs/chat_orchestration.md)
 - [docs/module_layout.md](/Users/drava/Documents/Hound/hf-playground/docs/module_layout.md)
 - [docs/deployment_azure.md](/Users/drava/Documents/Hound/hf-playground/docs/deployment_azure.md)
 - [docs/frontend_design_spec.md](/Users/drava/Documents/Hound/hf-playground/docs/frontend_design_spec.md)
