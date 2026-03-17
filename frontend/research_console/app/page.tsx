@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { CopilotAgentConsole } from "@/components/console/copilot-agent-console";
 
 export default function HomePage() {
-  redirect("/agent-lab");
+  return <CopilotAgentConsole />;
 }

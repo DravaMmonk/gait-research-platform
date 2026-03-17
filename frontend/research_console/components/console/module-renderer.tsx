@@ -1,19 +1,62 @@
 "use client";
 
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-
+import { useId } from "react";
 import { VisualModule } from "@/lib/console-types";
 
-function SummaryCard({ module }: { module: Extract<VisualModule, { type: "summary_card" }> }) {
+function buildSparklinePoints(series: Array<{ label: string; value: number }>) {
+  if (!series.length) {
+    return "";
+  }
+
+  const width = 100;
+  const height = 100;
+  const max = Math.max(...series.map((item) => item.value));
+  const min = Math.min(...series.map((item) => item.value));
+  const range = max - min || 1;
+
+  return series
+    .map((item, index) => {
+      const x = series.length === 1 ? width / 2 : (index / (series.length - 1)) * width;
+      const y = height - ((item.value - min) / range) * height;
+      return `${x},${y}`;
+    })
+    .join(" ");
+}
+
+function buildAreaPath(series: Array<{ label: string; value: number }>) {
+  if (!series.length) {
+    return "";
+  }
+
+  const points = buildSparklinePoints(series)
+    .split(" ")
+    .filter(Boolean);
+
+  if (!points.length) {
+    return "";
+  }
+
+  const first = points[0].split(",");
+  const last = points[points.length - 1].split(",");
+  return `M ${first[0]} 100 L ${points.join(" L ")} L ${last[0]} 100 Z`;
+}
+
+function SummaryCard({
+  module,
+  compact,
+}: {
+  module: Extract<VisualModule, { type: "summary_card" }>;
+  compact?: boolean;
+}) {
   return (
-    <article className="ui-panel">
-      <p className="ui-eyebrow">{module.title}</p>
-      <h3 className="ui-panel-title">{module.payload.title}</h3>
-      <p className="ui-copy mt-3">{module.payload.summary}</p>
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+    <article className={compact ? "module-card module-card-compact" : "ui-panel"}>
+      <p className={compact ? "module-kicker" : "ui-eyebrow"}>{module.title}</p>
+      <h3 className={compact ? "module-title" : "ui-panel-title"}>{module.payload.title}</h3>
+      <p className={compact ? "module-copy" : "ui-copy mt-3"}>{module.payload.summary}</p>
+      <div className={compact ? "module-grid" : "mt-5 grid gap-3 sm:grid-cols-3"}>
         {module.payload.highlights.map((item) => (
-          <div key={item.label} className="ui-section">
-            <p className="ui-micro">{item.label}</p>
+          <div key={item.label} className={compact ? "module-subcard" : "ui-section"}>
+            <p className={compact ? "module-subtle" : "ui-micro"}>{item.label}</p>
             <p className="mt-2 text-lg font-semibold">{item.value}</p>
           </div>
         ))}
@@ -22,46 +65,75 @@ function SummaryCard({ module }: { module: Extract<VisualModule, { type: "summar
   );
 }
 
-function TrendChart({ module }: { module: Extract<VisualModule, { type: "trend_chart" }> }) {
+function TrendChart({ module, compact }: { module: Extract<VisualModule, { type: "trend_chart" }>; compact?: boolean }) {
+  const gradientId = useId();
+  const min = Math.min(...module.payload.series.map((item) => item.value));
+  const max = Math.max(...module.payload.series.map((item) => item.value));
+  const points = buildSparklinePoints(module.payload.series);
+  const areaPath = buildAreaPath(module.payload.series);
+
   return (
-    <article className="ui-panel">
+    <article className={compact ? "module-card module-card-compact" : "ui-panel"}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="ui-eyebrow">{module.payload.metric}</p>
-          <h3 className="ui-panel-title">{module.title}</h3>
+          <p className={compact ? "module-kicker" : "ui-eyebrow"}>{module.payload.metric}</p>
+          <h3 className={compact ? "module-title" : "ui-panel-title"}>{module.title}</h3>
         </div>
-        <span className="ui-badge">{module.payload.time_range}</span>
+        <span className={compact ? "module-pill" : "ui-badge"}>{module.payload.time_range}</span>
       </div>
-      <div className="mt-5 h-72 min-w-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={module.payload.series}>
-            <defs>
-              <linearGradient id="consoleTrend" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.35} />
-                <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid vertical={false} stroke="rgba(15, 23, 42, 0.08)" />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} />
-            <YAxis tickLine={false} axisLine={false} />
-            <Tooltip />
-            <Area type="monotone" dataKey="value" stroke="var(--primary)" strokeWidth={2.5} fill="url(#consoleTrend)" />
-          </AreaChart>
-        </ResponsiveContainer>
+      <div className={compact ? "mt-4 min-w-0" : "mt-5 min-w-0"}>
+        <div className="rounded-[0.5rem] border border-[var(--border)] bg-[var(--panel-muted)] p-4">
+          <div className="flex items-end justify-between text-xs text-[var(--muted-foreground)]">
+            <span>{max.toFixed(1)}</span>
+            <span>{module.payload.unit}</span>
+          </div>
+          <div className="mt-3 h-44 w-full">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full overflow-visible">
+              <defs>
+                <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="5%" stopColor="var(--primary)" stopOpacity="0.3" />
+                  <stop offset="95%" stopColor="var(--primary)" stopOpacity="0.04" />
+                </linearGradient>
+              </defs>
+              <path d={areaPath} fill={`url(#${gradientId})`} />
+              <polyline
+                fill="none"
+                stroke="var(--primary)"
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                points={points}
+              />
+            </svg>
+          </div>
+          <div className="mt-3 flex items-center justify-between text-xs text-[var(--muted-foreground)]">
+            <span>{module.payload.series[0]?.label}</span>
+            <span>{module.payload.series[module.payload.series.length - 1]?.label}</span>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-4">
+            {module.payload.series.map((item) => (
+              <div key={item.label} className="rounded-[0.5rem] border border-[var(--border)] bg-[var(--panel)] px-3 py-2">
+                <p className="text-[0.69rem] font-semibold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">{item.label}</p>
+                <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">{item.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 text-xs text-[var(--muted-foreground)]">Range: {min.toFixed(1)} to {max.toFixed(1)}</div>
+        </div>
       </div>
     </article>
   );
 }
 
-function MetricTable({ module }: { module: Extract<VisualModule, { type: "metric_table" }> }) {
+function MetricTable({ module, compact }: { module: Extract<VisualModule, { type: "metric_table" }>; compact?: boolean }) {
   return (
-    <article className="ui-panel ui-scroll-x">
+    <article className={compact ? "module-card module-card-compact ui-stable-panel ui-stable-scroll-x" : "ui-panel ui-stable-panel ui-stable-scroll-x"}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="ui-eyebrow">{module.payload.metric}</p>
-          <h3 className="ui-panel-title">{module.title}</h3>
+          <p className={compact ? "module-kicker" : "ui-eyebrow"}>{module.payload.metric}</p>
+          <h3 className={compact ? "module-title" : "ui-panel-title"}>{module.title}</h3>
         </div>
-        {module.payload.sort ? <span className="ui-badge">{module.payload.sort}</span> : null}
+        {module.payload.sort ? <span className={compact ? "module-pill" : "ui-badge"}>{module.payload.sort}</span> : null}
       </div>
       <table className="mt-5 w-full min-w-[30rem] text-left text-sm">
         <thead>
@@ -91,29 +163,29 @@ function MetricTable({ module }: { module: Extract<VisualModule, { type: "metric
   );
 }
 
-function EvidencePanel({ module }: { module: Extract<VisualModule, { type: "evidence_panel" }> }) {
+function EvidencePanel({ module, compact }: { module: Extract<VisualModule, { type: "evidence_panel" }>; compact?: boolean }) {
   return (
-    <article className="ui-panel">
-      <p className="ui-eyebrow">{module.payload.review_status}</p>
-      <h3 className="ui-panel-title">{module.title}</h3>
+    <article className={compact ? "module-card module-card-compact" : "ui-panel"}>
+      <p className={compact ? "module-kicker" : "ui-eyebrow"}>{module.payload.review_status}</p>
+      <h3 className={compact ? "module-title" : "ui-panel-title"}>{module.title}</h3>
       <dl className="mt-5 space-y-4">
         <div>
-          <dt className="ui-micro">Confidence</dt>
-          <dd className="ui-copy mt-2">{module.payload.confidence}</dd>
+          <dt className={compact ? "module-subtle" : "ui-micro"}>Confidence</dt>
+          <dd className={compact ? "module-copy" : "ui-copy mt-2"}>{module.payload.confidence}</dd>
         </div>
         <div>
-          <dt className="ui-micro">Missingness</dt>
-          <dd className="ui-copy mt-2">{module.payload.missingness}</dd>
+          <dt className={compact ? "module-subtle" : "ui-micro"}>Missingness</dt>
+          <dd className={compact ? "module-copy" : "ui-copy mt-2"}>{module.payload.missingness}</dd>
         </div>
         <div>
-          <dt className="ui-micro">Provenance</dt>
-          <dd className="ui-copy mt-2">{module.payload.provenance}</dd>
+          <dt className={compact ? "module-subtle" : "ui-micro"}>Provenance</dt>
+          <dd className={compact ? "module-copy" : "ui-copy mt-2"}>{module.payload.provenance}</dd>
         </div>
       </dl>
       <ul className="mt-5 space-y-2">
         {module.payload.sources.map((source) => (
-          <li key={`${source.kind}-${source.reference}`} className="ui-section">
-            <p className="ui-micro">{source.label}</p>
+          <li key={`${source.kind}-${source.reference}`} className={compact ? "module-subcard" : "ui-section"}>
+            <p className={compact ? "module-subtle" : "ui-micro"}>{source.label}</p>
             <p className="mt-2 text-sm font-medium">{source.reference}</p>
           </li>
         ))}
@@ -122,16 +194,16 @@ function EvidencePanel({ module }: { module: Extract<VisualModule, { type: "evid
   );
 }
 
-function FormulaCard({ module }: { module: Extract<VisualModule, { type: "formula_explanation_card" }> }) {
+function FormulaCard({ module, compact }: { module: Extract<VisualModule, { type: "formula_explanation_card" }>; compact?: boolean }) {
   return (
-    <article className="ui-panel">
-      <p className="ui-eyebrow">{module.payload.formula_id}</p>
-      <h3 className="ui-panel-title">{module.title}</h3>
-      <pre className="ui-code mt-5">{module.payload.expression}</pre>
-      <p className="ui-copy mt-5">{module.payload.interpretation}</p>
+    <article className={compact ? "module-card module-card-compact" : "ui-panel"}>
+      <p className={compact ? "module-kicker" : "ui-eyebrow"}>{module.payload.formula_id}</p>
+      <h3 className={compact ? "module-title" : "ui-panel-title"}>{module.title}</h3>
+      <pre className={compact ? "module-code" : "ui-code mt-5"}>{module.payload.expression}</pre>
+      <p className={compact ? "module-copy" : "ui-copy mt-5"}>{module.payload.interpretation}</p>
       <ul className="mt-5 space-y-2">
         {module.payload.assumptions.map((assumption) => (
-          <li key={assumption} className="ui-section text-sm">
+          <li key={assumption} className={compact ? "module-subcard text-sm" : "ui-section text-sm"}>
             {assumption}
           </li>
         ))}
@@ -140,18 +212,18 @@ function FormulaCard({ module }: { module: Extract<VisualModule, { type: "formul
   );
 }
 
-function VideoPanel({ module }: { module: Extract<VisualModule, { type: "video_panel" }> }) {
+function VideoPanel({ module, compact }: { module: Extract<VisualModule, { type: "video_panel" }>; compact?: boolean }) {
   return (
-    <article className="ui-panel">
-      <p className="ui-eyebrow">{module.payload.asset_id}</p>
-      <h3 className="ui-panel-title">{module.payload.title}</h3>
-      <div className="mt-5 flex aspect-video items-center justify-center rounded-[1.25rem] border border-dashed border-[var(--border-strong)] bg-[var(--muted)] text-sm text-[var(--muted-foreground)]">
+    <article className={compact ? "module-card module-card-compact" : "ui-panel"}>
+      <p className={compact ? "module-kicker" : "ui-eyebrow"}>{module.payload.asset_id}</p>
+      <h3 className={compact ? "module-title" : "ui-panel-title"}>{module.payload.title}</h3>
+      <div className="mt-5 flex aspect-video items-center justify-center rounded-[0.5rem] border border-dashed border-[var(--border-strong)] bg-[var(--panel-muted)] text-sm text-[var(--muted-foreground)]">
         Video panel placeholder
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <span className="ui-badge">{module.payload.timestamp_range}</span>
+        <span className={compact ? "module-pill" : "ui-badge"}>{module.payload.timestamp_range}</span>
         {module.payload.related_metrics.map((metric) => (
-          <span key={metric} className="ui-badge">
+          <span key={metric} className={compact ? "module-pill" : "ui-badge"}>
             {metric}
           </span>
         ))}
@@ -160,15 +232,15 @@ function VideoPanel({ module }: { module: Extract<VisualModule, { type: "video_p
   );
 }
 
-function ComparisonCards({ module }: { module: Extract<VisualModule, { type: "comparison_cards" }> }) {
+function ComparisonCards({ module, compact }: { module: Extract<VisualModule, { type: "comparison_cards" }>; compact?: boolean }) {
   return (
-    <article className="ui-panel">
-      <p className="ui-eyebrow">{module.title}</p>
-      <h3 className="ui-panel-title">{module.payload.title}</h3>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+    <article className={compact ? "module-card module-card-compact" : "ui-panel"}>
+      <p className={compact ? "module-kicker" : "ui-eyebrow"}>{module.title}</p>
+      <h3 className={compact ? "module-title" : "ui-panel-title"}>{module.payload.title}</h3>
+      <div className={compact ? "module-grid" : "mt-5 grid gap-3 sm:grid-cols-2"}>
         {module.payload.items.map((item) => (
-          <div key={item.label} className="ui-section">
-            <p className="ui-micro">{item.label}</p>
+          <div key={item.label} className={compact ? "module-subcard" : "ui-section"}>
+            <p className={compact ? "module-subtle" : "ui-micro"}>{item.label}</p>
             <p className="mt-2 text-2xl font-semibold">{item.value}</p>
             {item.delta ? <p className="mt-1 text-sm text-[var(--muted-foreground)]">{item.delta}</p> : null}
           </div>
@@ -178,22 +250,22 @@ function ComparisonCards({ module }: { module: Extract<VisualModule, { type: "co
   );
 }
 
-export function ModuleRenderer({ module }: { module: VisualModule }) {
+export function ModuleRenderer({ module, compact = false }: { module: VisualModule; compact?: boolean }) {
   switch (module.type) {
     case "summary_card":
-      return <SummaryCard module={module} />;
+      return <SummaryCard module={module} compact={compact} />;
     case "trend_chart":
-      return <TrendChart module={module} />;
+      return <TrendChart module={module} compact={compact} />;
     case "metric_table":
-      return <MetricTable module={module} />;
+      return <MetricTable module={module} compact={compact} />;
     case "evidence_panel":
-      return <EvidencePanel module={module} />;
+      return <EvidencePanel module={module} compact={compact} />;
     case "formula_explanation_card":
-      return <FormulaCard module={module} />;
+      return <FormulaCard module={module} compact={compact} />;
     case "video_panel":
-      return <VideoPanel module={module} />;
+      return <VideoPanel module={module} compact={compact} />;
     case "comparison_cards":
-      return <ComparisonCards module={module} />;
+      return <ComparisonCards module={module} compact={compact} />;
     default:
       return null;
   }

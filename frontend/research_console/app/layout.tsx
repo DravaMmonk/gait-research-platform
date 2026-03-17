@@ -1,9 +1,10 @@
 import "./globals.css";
+import "@copilotkit/react-ui/styles.css";
 import { ReactNode } from "react";
 
 export const metadata = {
-  title: "Hound Forward Research Console",
-  description: "Research UI scaffold for the Azure AI-native canine movement platform.",
+  title: "Hound Forward Agent Console",
+  description: "Single-surface chat-first console for Hound Forward agent interactions.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

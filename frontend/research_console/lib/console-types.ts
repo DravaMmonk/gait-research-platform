@@ -1,41 +1,4 @@
-export type DisplayPreference =
-  | "table_only"
-  | "prefer_chart"
-  | "prefer_video"
-  | "raw_values_only"
-  | "evidence_first";
-
 export type ConsoleViewMode = "summary" | "chart" | "table" | "evidence" | "video" | "formula";
-
-export type ActiveContext = {
-  session_id?: string;
-  run_id?: string;
-  metric_name?: string;
-  formula_definition_id?: string;
-  asset_id?: string;
-};
-
-export type ConsoleThreadMessage = {
-  role: "user" | "assistant";
-  content: string;
-  created_at: string;
-};
-
-export type ToolTraceItem = {
-  tool_name: string;
-  purpose: string;
-  status: string;
-  details: Record<string, unknown>;
-};
-
-export type EvidenceContext = {
-  metric_definition: string;
-  time_range: string;
-  data_quality: string;
-  clinician_reviewed: boolean;
-  derived_metric: boolean;
-  references: string[];
-};
 
 export type SummaryCardModule = {
   type: "summary_card";
@@ -130,30 +93,3 @@ export type VisualModule =
   | FormulaExplanationModule
   | VideoPanelModule
   | ComparisonCardsModule;
-
-export type ConsoleAgentRequest = {
-  session_id: string;
-  message: string;
-  display_preferences: DisplayPreference[];
-  active_context?: ActiveContext | null;
-};
-
-export type ConsoleAgentResponse = {
-  thread: ConsoleThreadMessage[];
-  message: string;
-  modules: VisualModule[];
-  view_modes: ConsoleViewMode[];
-  tool_trace: ToolTraceItem[];
-  evidence_context: EvidenceContext;
-  warnings: string[];
-  suggested_followups: string[];
-};
-
-export type WorkspaceCard = {
-  id: string;
-  label: string;
-  title: string;
-  status: string;
-  description: string;
-  metrics: Array<{ label: string; value: string }>;
-};
