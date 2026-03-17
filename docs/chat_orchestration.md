@@ -89,3 +89,10 @@ The frontend uses `progress_messages` as pseudo-streaming text before rendering 
 - `/agent/console/respond` remains available for compatibility with the older console contract.
 - New chat development should target `/api/chat`.
 - The CopilotKit adapter is a transport layer only. The backend orchestrator is the source of truth for chat behavior.
+
+## Session Management
+
+- The research console frontend now manages sessions explicitly through a sidebar.
+- The backend exposes `GET /sessions`, `POST /sessions`, and `DELETE /sessions/{session_id}` for session lifecycle management.
+- The selected sidebar session becomes the active chat thread and is passed to `/api/chat` automatically.
+- End users do not need to know or type `session_id` values. Questions such as "List the uploaded video assets in the current session" are resolved against the active sidebar session.

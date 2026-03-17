@@ -127,6 +127,110 @@ textarea {
   overflow: hidden;
 }
 
+.hound-console-layout {
+  min-height: 0;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+}
+
+.hound-session-sidebar,
+.hound-session-sidebar-card {
+  min-height: 0;
+}
+
+.hound-session-sidebar-card {
+  height: 100%;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  background: var(--panel-subtle);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.hound-session-sidebar-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.hound-session-primary-button,
+.hound-session-delete {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.hound-session-primary-button {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  padding: 10px 14px;
+}
+
+.hound-session-primary-button:disabled,
+.hound-session-delete:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.hound-session-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+  padding-right: 2px;
+}
+
+.hound-session-item {
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  background: hsl(var(--card));
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.hound-session-item-active {
+  border-color: var(--panel-border-strong);
+  background: linear-gradient(180deg, hsl(var(--primary) / 0.12), hsl(var(--background) / 0.92));
+}
+
+.hound-session-select {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+}
+
+.hound-session-title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.hound-session-meta {
+  color: var(--muted-foreground-solid);
+  font-size: 0.82rem;
+}
+
+.hound-session-delete {
+  justify-self: start;
+  border-color: hsl(var(--destructive) / 0.16);
+  background: hsl(var(--destructive) / 0.08);
+  color: hsl(var(--destructive));
+  padding: 8px 12px;
+}
+
 .hound-loading-card {
   height: 100%;
   display: grid;
@@ -737,6 +841,10 @@ textarea {
 }
 
 @media (max-width: 1080px) {
+  .hound-console-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .hound-header {
     flex-direction: column;
   }
@@ -757,6 +865,11 @@ textarea {
 
   .hound-frame {
     height: calc(100vh - 28px);
+  }
+
+  .hound-session-sidebar-card,
+  .hound-header {
+    padding: 16px;
   }
 
   .agent-header,
