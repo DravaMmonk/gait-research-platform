@@ -19,6 +19,20 @@ from hound_forward.pipeline import PlatformRunExecutor
 from hound_forward.worker.runtime import PlaceholderLocalWorkerBridge
 
 
+def fake_openai_json_response(self, *, system_prompt, user_prompt, schema_name, schema):
+    if schema_name == "intent_classification":
+        if "what does this result mean" in user_prompt.lower():
+            return {"intent": "explain_result"}
+        if "stride length" in user_prompt.lower():
+            return {"intent": "ask_question"}
+        return {"intent": "run_analysis"}
+    if schema_name == "general_question_response":
+        return {"message": "Stride length is the distance covered in one stride cycle."}
+    if schema_name == "result_explanation_response":
+        return {"message": "The run completed successfully and the metrics suggest the gait pattern is interpretable."}
+    raise RuntimeError(f"Unexpected schema_name: {schema_name}")
+
+
 def build_service(tmp_path: Path) -> ResearchPlatformService:
     metadata = AzurePostgresMetadataRepository(f"sqlite+pysqlite:///{tmp_path / 'platform.db'}")
     metadata.create_all()
@@ -351,5 +365,160 @@ def test_api_surface_supports_console_agent_response(tmp_path: Path, monkeypatch
     assert payload["view_modes"][0] == "table"
     assert payload["modules"]
     assert {item["type"] for item in payload["modules"]} == {"metric_table", "evidence_panel"}
-    assert payload["evidence_context"]["derived_metric"] is True
+    assert payload["evidence_context"]["derived_metric"] is False
     assert payload["tool_trace"]
+    assert "controlled visual modules" not in payload["message"]
+
+
+def test_console_agent_response_executes_langgraph_when_video_is_available(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'console-run-api.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "console-run-api-artifacts"))
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_graph.cache_clear()
+    client = TestClient(create_app())
+
+    session_response = client.post("/sessions", json={"title": "Console run session", "metadata": {"source": "test"}})
+    assert session_response.status_code == 200
+    session = session_response.json()
+
+    upload_response = client.post(
+        f"/sessions/{session['session_id']}/videos",
+        files={"file": ("sample.mp4", b"fake-video-binary", "video/mp4")},
+    )
+    assert upload_response.status_code == 200
+
+    response = client.post(
+        "/agent/console/respond",
+        json={
+            "session_id": session["session_id"],
+            "message": "Evaluate clinician cohort",
+            "display_preferences": [],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert "I ran" in payload["message"]
+    assert "Agent tool-chain result" in payload["message"]
+    assert payload["evidence_context"]["derived_metric"] is True
+    assert {item["tool_name"] for item in payload["tool_trace"]} >= {"planner", "langgraph_execute", "read_metrics"}
+
+
+def test_api_chat_runs_analysis_and_returns_progress_messages(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'chat-api.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "chat-api-artifacts"))
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.intent_router.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.reasoner.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_graph.cache_clear()
+    app_module.build_chat_orchestrator.cache_clear()
+    client = TestClient(create_app())
+
+    session_response = client.post("/sessions", json={"title": "Chat session"})
+    session = session_response.json()
+    client.post(
+        f"/sessions/{session['session_id']}/videos",
+        files={"file": ("sample.mp4", b"fake-video-binary", "video/mp4")},
+    )
+
+    response = client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "Analyze my dog's gait"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["type"] == "run"
+    assert payload["run_id"]
+    assert payload["progress_messages"]
+    assert payload["structured_data"]["execution_plan"]["stages"]
+    assert payload["structured_data"]["metrics"]
+
+
+def test_api_chat_answers_question_without_run(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'chat-question.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "chat-question-artifacts"))
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.intent_router.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.reasoner.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_graph.cache_clear()
+    app_module.build_chat_orchestrator.cache_clear()
+    client = TestClient(create_app())
+
+    session_response = client.post("/sessions", json={"title": "Question session"})
+    session = session_response.json()
+
+    response = client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "What is stride length?"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["type"] == "text"
+    assert payload["run_id"] is None
+    assert payload["message"] == "Stride length is the distance covered in one stride cycle."
+
+
+def test_api_chat_explains_existing_run(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'chat-explain.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "chat-explain-artifacts"))
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.intent_router.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.reasoner.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_graph.cache_clear()
+    app_module.build_chat_orchestrator.cache_clear()
+    client = TestClient(create_app())
+
+    session_response = client.post("/sessions", json={"title": "Explain session"})
+    session = session_response.json()
+    client.post(
+        f"/sessions/{session['session_id']}/videos",
+        files={"file": ("sample.mp4", b"fake-video-binary", "video/mp4")},
+    )
+    run_response = client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "Analyze my dog's gait"},
+    )
+    run_id = run_response.json()["run_id"]
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "session_id": session["session_id"],
+            "message": "What does this result mean?",
+            "context": {"run_id": run_id},
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["type"] == "text"
+    assert payload["run_id"] == run_id
+    assert payload["structured_data"]["source_run_id"] == run_id

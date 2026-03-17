@@ -4,7 +4,7 @@ from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from hound_forward.agent_system.planners.experiment_planner import ExperimentManifestPlanner
+from hound_forward.agent_system.planners.protocol import PlannerProtocol
 from hound_forward.agent_system.tools.registry import ToolRegistry
 from hound_forward.worker.runtime import PlaceholderLocalWorkerBridge
 
@@ -25,7 +25,7 @@ class ResearchGraphState(TypedDict, total=False):
 class ResearchGraph:
     def __init__(
         self,
-        planner: ExperimentManifestPlanner,
+        planner: PlannerProtocol,
         tools: ToolRegistry,
         worker_bridge: PlaceholderLocalWorkerBridge | None = None,
     ) -> None:
@@ -34,8 +34,19 @@ class ResearchGraph:
         self.worker_bridge = worker_bridge or PlaceholderLocalWorkerBridge(service=tools.service)
         self.graph = self._build_graph().compile()
 
-    def invoke(self, goal: str, session_id: str) -> ResearchGraphState:
-        return self.graph.invoke({"goal": goal, "session_id": session_id})
+    def invoke(
+        self,
+        goal: str,
+        session_id: str,
+        manifest: dict | None = None,
+        execution_plan: dict | None = None,
+    ) -> ResearchGraphState:
+        state: ResearchGraphState = {"goal": goal, "session_id": session_id}
+        if manifest is not None:
+            state["manifest"] = manifest
+        if execution_plan is not None:
+            state["execution_plan"] = execution_plan
+        return self.graph.invoke(state)
 
     def _build_graph(self) -> StateGraph:
         graph = StateGraph(ResearchGraphState)
@@ -57,6 +68,8 @@ class ResearchGraph:
         return graph
 
     def _planner_node(self, state: ResearchGraphState) -> ResearchGraphState:
+        if state.get("manifest") is not None and state.get("execution_plan") is not None:
+            return {"manifest": state["manifest"], "execution_plan": state["execution_plan"]}
         manifest = self.planner.plan(goal=state["goal"])
         execution_plan = self.planner.plan_execution(goal=state["goal"], input_asset_ids=state.get("input_asset_ids"))
         return {"manifest": manifest.model_dump(mode="json"), "execution_plan": execution_plan.model_dump(mode="json")}

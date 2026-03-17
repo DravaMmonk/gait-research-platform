@@ -416,37 +416,47 @@ class ResearchPlatformService:
             raise KeyError(f"Unknown session_id: {session_id}")
 
         preferences = self._merge_display_preferences(message=message, explicit=display_preferences or [])
-        view_modes = self._select_view_modes(preferences)
-        modules = self._build_console_modules(session=session, message=message, preferences=preferences, active_context=active_context)
+        console_state = self._build_console_state(session_id=session_id, message=message)
+        modules = self._build_console_modules(
+            session=session,
+            message=message,
+            preferences=preferences,
+            active_context=active_context,
+            console_state=console_state,
+        )
+        view_modes = self._collect_view_modes(preferences=preferences, modules=modules)
+        assistant_message = self._assistant_message(message=message, console_state=console_state)
         thread = [
             ConsoleThreadMessage(role="user", content=message),
             ConsoleThreadMessage(
                 role="assistant",
-                content="Research console response assembled from controlled visual modules and evidence-aware summaries.",
+                content=assistant_message,
             ),
         ]
-        evidence_context = EvidenceContext(
-            metric_definition="mobility_index_v2",
-            time_range="Last 6 months",
-            data_quality="2 sessions contain incomplete metadata; values are still suitable for trend review.",
-            clinician_reviewed=True,
-            derived_metric=True,
-            references=["run-001", "formula:mobility_index_v2", "video:video-001"],
-        )
+        evidence_context = self._build_evidence_context(console_state=console_state)
         warnings = []
+        if console_state["mode"] == "preview":
+            warnings.append("The execution plan is ready, but no uploaded video is attached to this session yet.")
         if DisplayPreference.RAW_VALUES_ONLY in preferences:
             warnings.append("Raw values preference suppresses interpretation-heavy modules where possible.")
-        suggested_followups = [
-            "Show this as a table only.",
-            "Open the supporting video and evidence trail.",
-            "Compare this against the clinician validation cohort.",
-        ]
+        if console_state["mode"] == "executed":
+            suggested_followups = [
+                "Show this as a table only.",
+                "Open the supporting video and evidence trail.",
+                "Compare this run against the previous completed run.",
+            ]
+        else:
+            suggested_followups = [
+                "Upload a session video and run this analysis again.",
+                "Show the planned execution stages as a table.",
+                "Explain which tool stage will produce each artifact.",
+            ]
         return ConsoleAgentResponse(
             thread=thread,
-            message=self._assistant_message(message=message, preferences=preferences),
+            message=assistant_message,
             modules=modules,
             view_modes=view_modes,
-            tool_trace=self._build_tool_trace(message=message, preferences=preferences),
+            tool_trace=self._build_tool_trace(message=message, preferences=preferences, console_state=console_state),
             evidence_context=evidence_context,
             warnings=warnings,
             suggested_followups=suggested_followups,
@@ -509,6 +519,91 @@ class ResearchPlatformService:
             return [ConsoleViewMode.EVIDENCE, ConsoleViewMode.SUMMARY, ConsoleViewMode.CHART, ConsoleViewMode.TABLE]
         return modes
 
+    @staticmethod
+    def _collect_view_modes(
+        preferences: list[DisplayPreference],
+        modules: list[
+            SummaryCardModule
+            | TrendChartModule
+            | MetricTableModule
+            | EvidencePanelModule
+            | FormulaExplanationModule
+            | VideoPanelModule
+            | ComparisonCardsModule
+        ],
+    ) -> list[ConsoleViewMode]:
+        if DisplayPreference.TABLE_ONLY in preferences:
+            return [ConsoleViewMode.TABLE, ConsoleViewMode.EVIDENCE]
+        if DisplayPreference.EVIDENCE_FIRST in preferences:
+            return [ConsoleViewMode.EVIDENCE, ConsoleViewMode.SUMMARY, ConsoleViewMode.CHART, ConsoleViewMode.TABLE]
+        seen: set[ConsoleViewMode] = set()
+        ordered: list[ConsoleViewMode] = []
+        for module in modules:
+            if module.view_mode in seen:
+                continue
+            seen.add(module.view_mode)
+            ordered.append(module.view_mode)
+        return ordered or [ConsoleViewMode.SUMMARY]
+
+    def _build_console_state(self, *, session_id: str, message: str) -> dict[str, Any]:
+        planner = self._build_console_planner()
+        manifest = planner.plan(goal=message)
+        execution_plan = planner.plan_execution(goal=message)
+        videos = self.list_session_videos(session_id)
+        if not videos:
+            return {
+                "mode": "preview",
+                "goal": message,
+                "manifest": manifest.model_dump(mode="json"),
+                "execution_plan": execution_plan.model_dump(mode="json"),
+                "run_status": "blocked_no_video",
+                "recommendation": "The agent could not execute this request because the session has no uploaded video yet.",
+                "video_asset_id": None,
+                "run_detail": None,
+                "comparison": None,
+            }
+
+        graph = self._build_console_graph(planner=planner)
+        graph_state = graph.invoke(goal=message, session_id=session_id)
+        run_detail = self.get_run_detail(graph_state["run_id"])
+        comparison = self._build_console_comparison(session_id=session_id, current_run_id=run_detail.run.run_id)
+        return {
+            "mode": "executed",
+            **graph_state,
+            "run_detail": run_detail,
+            "comparison": comparison,
+        }
+
+    def _build_console_graph(self, planner: Any) -> Any:
+        from hound_forward.agent_system.graphs.research_graph import ResearchGraph
+        from hound_forward.agent_system.tools.registry import ToolRegistry
+        from hound_forward.worker.runtime import PlaceholderLocalWorkerBridge
+
+        return ResearchGraph(
+            planner=planner,
+            tools=ToolRegistry(self),
+            worker_bridge=PlaceholderLocalWorkerBridge(service=self),
+        )
+
+    def _build_console_planner(self) -> Any:
+        from hound_forward.agent_system.planners import build_planner
+        from hound_forward.settings import PlatformSettings
+
+        settings = PlatformSettings()
+        available_tools = self.container.tool_runner.describe_tools() if self.container.tool_runner else []
+        return build_planner(settings=settings, available_tools=available_tools)
+
+    def _build_console_comparison(self, *, session_id: str, current_run_id: str) -> dict[str, Any] | None:
+        prior_runs = [
+            run
+            for run in self.list_runs(session_id=session_id)
+            if run.run_id != current_run_id and run.status == RunStatus.COMPLETED
+        ]
+        if not prior_runs:
+            return None
+        baseline = sorted(prior_runs, key=lambda item: item.created_at)[-1]
+        return self.compare_runs(baseline.run_id, current_run_id)
+
     def _build_console_modules(
         self,
         *,
@@ -516,6 +611,7 @@ class ResearchPlatformService:
         message: str,
         preferences: list[DisplayPreference],
         active_context: ActiveContext | None,
+        console_state: dict[str, Any],
     ) -> list[
         SummaryCardModule
         | TrendChartModule
@@ -526,116 +622,187 @@ class ResearchPlatformService:
         | ComparisonCardsModule
     ]:
         metric_name = active_context.metric_name if active_context and active_context.metric_name else "mobility_index_v2"
+        run_detail: RunDetailResponse | None = console_state.get("run_detail")
+        metrics = run_detail.metrics if run_detail is not None else []
+        metric_map = {item.name: item.value for item in metrics}
+        if run_detail is not None and run_detail.run.execution_plan is not None:
+            stage_names = [stage.name for stage in run_detail.run.execution_plan.stages]
+        else:
+            stage_names = [stage.get("name", "unknown_stage") for stage in console_state.get("execution_plan", {}).get("stages", [])]
+        report_summary = (
+            run_detail.run.summary.get("last_stage_summary", {}) if run_detail is not None else {}
+        )
+        recommendations = report_summary.get("recommendations") or [console_state["recommendation"]]
+        video_asset_id = (
+            active_context.asset_id
+            if active_context and active_context.asset_id
+            else console_state.get("video_asset_id")
+            or (run_detail.run.input_asset_ids[0] if run_detail is not None and run_detail.run.input_asset_ids else "video-unavailable")
+        )
         summary_module = SummaryCardModule(
             title="Research Summary",
             payload=SummaryCardPayload(
-                title="Mobility trend review",
-                summary="Mobility has softened through March, with the sharpest deviation aligned to reduced stride symmetry.",
-                status="attention_needed",
+                title="Execution summary" if run_detail is not None else "Execution plan preview",
+                summary=recommendations[0],
+                status="completed" if run_detail is not None else "blocked",
                 highlights=[
                     HighlightItem(label="Dog", value=session.title),
-                    HighlightItem(label="Focus metric", value=metric_name),
-                    HighlightItem(label="Abnormal window", value="March"),
+                    HighlightItem(label="Goal", value=(run_detail.run.manifest.goal if run_detail is not None else message)[:72]),
+                    HighlightItem(label="Stages", value=str(len(stage_names))),
+                    HighlightItem(
+                        label="Run status",
+                        value=run_detail.run.status.value if run_detail is not None else "waiting_for_video",
+                    ),
                 ],
             ),
         )
         trend_module = TrendChartModule(
             title="Trend Chart",
             payload=TrendChartPayload(
-                metric=metric_name,
-                unit="score",
-                time_range="12 months",
-                x_axis="Month",
-                y_axis="Mobility score",
+                metric=metric_name if metrics else "planned_execution_stages",
+                unit="score" if metrics else "stage",
+                time_range="current run" if metrics else "pre-run",
+                x_axis="Metric" if metrics else "Stage",
+                y_axis="Value" if metrics else "Sequence",
                 series=[
-                    {"label": "Jan", "value": 0.82},
-                    {"label": "Feb", "value": 0.8},
-                    {"label": "Mar", "value": 0.61},
-                    {"label": "Apr", "value": 0.66},
-                    {"label": "May", "value": 0.71},
-                    {"label": "Jun", "value": 0.74},
+                    {"label": name, "value": round(value, 4)}
+                    for name, value in sorted(metric_map.items())
+                ]
+                if metrics
+                else [
+                    {"label": stage_name, "value": float(index + 1)}
+                    for index, stage_name in enumerate(stage_names)
                 ],
             ),
         )
         table_module = MetricTableModule(
             title="Metric Table",
             payload=MetricTablePayload(
-                metric=metric_name,
-                columns=[
-                    MetricTableColumn(key="month", label="Month"),
-                    MetricTableColumn(key="value", label="Value"),
-                    MetricTableColumn(key="quality", label="Quality"),
-                ],
-                rows=[
-                    MetricTableRow(values={"month": "Jan", "value": 0.82, "quality": "complete"}, raw=False, derived=True),
-                    MetricTableRow(values={"month": "Feb", "value": 0.80, "quality": "complete"}, raw=False, derived=True),
-                    MetricTableRow(values={"month": "Mar", "value": 0.61, "quality": "missing metadata"}, raw=False, derived=True),
-                ],
-                sort="month.asc",
+                metric=metric_name if metrics else "execution_plan",
+                columns=(
+                    [
+                        MetricTableColumn(key="metric", label="Metric"),
+                        MetricTableColumn(key="value", label="Value"),
+                        MetricTableColumn(key="version", label="Version"),
+                    ]
+                    if metrics
+                    else [
+                        MetricTableColumn(key="stage", label="Stage"),
+                        MetricTableColumn(key="tool", label="Tool"),
+                        MetricTableColumn(key="status", label="Status"),
+                    ]
+                ),
+                rows=(
+                    [
+                        MetricTableRow(
+                            values={"metric": item.name, "value": round(item.value, 4), "version": item.version},
+                            raw=DisplayPreference.RAW_VALUES_ONLY in preferences,
+                            derived=True,
+                        )
+                        for item in metrics
+                    ]
+                    if metrics
+                    else [
+                        MetricTableRow(
+                            values={
+                                "stage": stage.get("name", "unknown_stage"),
+                                "tool": (stage.get("tool_invocation") or {}).get("tool_name", "n/a"),
+                                "status": "planned",
+                            },
+                            raw=False,
+                            derived=False,
+                        )
+                        for stage in console_state.get("execution_plan", {}).get("stages", [])
+                    ]
+                ),
+                sort="metric.asc" if metrics else "stage.asc",
             ),
         )
         evidence_module = EvidencePanelModule(
             title="Evidence Panel",
             payload=EvidencePanelPayload(
-                confidence="moderate",
-                review_status="clinician_reviewed",
-                missingness="2 of 14 sessions have incomplete metadata.",
-                provenance="Derived from stride_length / body_length with March anomaly evidence linked to asymmetry drift.",
+                confidence="moderate" if run_detail is not None else "not_available",
+                review_status="run_completed" if run_detail is not None else "awaiting_input_video",
+                missingness=(
+                    "No missing metric artifacts were detected in this run."
+                    if run_detail is not None
+                    else "The agent has not run yet because this session has no uploaded video."
+                ),
+                provenance=(
+                    f"Run {run_detail.run.run_id} executed {len(stage_names)} planned tool stages."
+                    if run_detail is not None
+                    else f"Planned execution chain: {' -> '.join(stage_names)}."
+                ),
                 sources=[
-                    {"label": "Run", "kind": "run", "reference": "run-001"},
-                    {"label": "Formula", "kind": "formula", "reference": "mobility_index_v2"},
-                    {"label": "Video", "kind": "video", "reference": active_context.asset_id if active_context and active_context.asset_id else "video-001"},
-                ],
-            ),
-        )
-        formula_module = FormulaExplanationModule(
-            title="Formula Explanation",
-            payload=FormulaExplanationPayload(
-                formula_id="mobility_index_v2",
-                expression="stride_length / body_length",
-                interpretation="Normalizing stride length by body size allows locomotion efficiency to be compared across dogs of different sizes.",
-                assumptions=[
-                    "Body length normalization remains stable across the observation window.",
-                    "Stride extraction quality is sufficient for month-level comparison.",
+                    {"label": "Run", "kind": "run", "reference": run_detail.run.run_id if run_detail is not None else "pending"},
+                    {"label": "Plan", "kind": "execution_plan", "reference": console_state.get("execution_plan", {}).get("plan_id", "unknown-plan")},
+                    {"label": "Video", "kind": "video", "reference": video_asset_id},
                 ],
             ),
         )
         video_module = VideoPanelModule(
             title="Video Review",
             payload=VideoPanelPayload(
-                asset_id=active_context.asset_id if active_context and active_context.asset_id else "video-001",
-                title="March gait review clip",
-                timestamp_range="00:12-00:26",
-                related_metrics=[metric_name, "asymmetry_index"],
+                asset_id=video_asset_id,
+                title="Session analysis input",
+                timestamp_range="full clip",
+                related_metrics=sorted(metric_map.keys()) if metric_map else [metric_name],
             ),
         )
+        comparison = console_state.get("comparison")
         comparison_module = ComparisonCardsModule(
             title="Comparison Cards",
             payload=ComparisonCardsPayload(
-                title="Month-over-month comparison",
+                title="Run-over-run comparison",
                 items=[
-                    ComparisonCardItem(label="March vs February", value="-0.19", delta="-24%"),
-                    ComparisonCardItem(label="March asymmetry", value="0.18", delta="+0.07"),
+                    ComparisonCardItem(
+                        label=item["name"],
+                        value="n/a" if item["right"] is None else f'{item["right"]:.4f}',
+                        delta=(
+                            None
+                            if item["delta"] is None
+                            else f'{item["delta"]:+.4f}'
+                        ),
+                    )
+                    for item in (comparison or {}).get("metrics", [])[:4]
                 ],
             ),
         )
 
-        modules: list[Any] = [summary_module, trend_module, table_module, evidence_module, formula_module, video_module, comparison_module]
+        modules: list[Any] = [summary_module, trend_module, table_module, evidence_module]
+        if run_detail is not None:
+            modules.append(video_module)
+        if comparison and comparison_module.payload.items:
+            modules.append(comparison_module)
         if DisplayPreference.TABLE_ONLY in preferences:
             return [table_module, evidence_module]
         if DisplayPreference.RAW_VALUES_ONLY in preferences:
-            return [summary_module, table_module, evidence_module]
-        if DisplayPreference.PREFER_VIDEO in preferences:
-            return [summary_module, video_module, trend_module, evidence_module, formula_module]
+            raw_modules: list[Any] = [summary_module, table_module, evidence_module]
+            if run_detail is not None:
+                raw_modules.append(video_module)
+            return raw_modules
+        if DisplayPreference.PREFER_VIDEO in preferences and run_detail is not None:
+            return [summary_module, video_module, trend_module, evidence_module]
         if DisplayPreference.EVIDENCE_FIRST in preferences:
-            return [evidence_module, summary_module, trend_module, table_module, formula_module]
-        if "compare" in message.lower():
+            ordered = [evidence_module, summary_module, trend_module, table_module]
+            if run_detail is not None:
+                ordered.append(video_module)
+            if comparison and comparison_module.payload.items:
+                ordered.append(comparison_module)
+            return ordered
+        if "compare" in message.lower() and comparison and comparison_module.payload.items:
             return [summary_module, comparison_module, trend_module, table_module, evidence_module]
         return modules
 
     @staticmethod
-    def _build_tool_trace(message: str, preferences: list[DisplayPreference]) -> list[ToolTraceItem]:
-        return [
+    def _build_tool_trace(
+        message: str,
+        preferences: list[DisplayPreference],
+        console_state: dict[str, Any],
+    ) -> list[ToolTraceItem]:
+        execution_plan = console_state.get("execution_plan", {})
+        stages = execution_plan.get("stages", [])
+        trace = [
             ToolTraceItem(
                 tool_name="intent_parser",
                 purpose="Normalize user goal and display intent into console semantics.",
@@ -643,28 +810,91 @@ class ResearchPlatformService:
                 details={"message": message, "display_preferences": [item.value for item in preferences]},
             ),
             ToolTraceItem(
-                tool_name="read_metrics",
-                purpose="Retrieve placeholder metric evidence for the selected session context.",
+                tool_name="planner",
+                purpose="Build a LangGraph manifest and execution plan for the console request.",
                 status="ok",
-                details={"metric": "mobility_index_v2", "time_range": "12 months"},
-            ),
-            ToolTraceItem(
-                tool_name="render_modules",
-                purpose="Select controlled visual modules for frontend rendering.",
-                status="ok",
-                details={"module_types": ["summary_card", "trend_chart", "metric_table", "evidence_panel"]},
+                details={"stage_names": [stage.get("name") for stage in stages], "plan_id": execution_plan.get("plan_id")},
             ),
         ]
+        if console_state.get("mode") == "executed":
+            run_detail: RunDetailResponse = console_state["run_detail"]
+            trace.extend(
+                [
+                    ToolTraceItem(
+                        tool_name="langgraph_execute",
+                        purpose="Execute the planned tool chain against the session video.",
+                        status=run_detail.run.status.value,
+                        details={"run_id": run_detail.run.run_id, "stage_count": len(run_detail.run.stage_results)},
+                    ),
+                    ToolTraceItem(
+                        tool_name="read_metrics",
+                        purpose="Collect metric outputs and report recommendations from the finished run.",
+                        status="ok",
+                        details={"metric_names": [item.name for item in run_detail.metrics]},
+                    ),
+                ]
+            )
+        else:
+            trace.append(
+                ToolTraceItem(
+                    tool_name="execution_blocker",
+                    purpose="Explain why the planned execution chain did not run.",
+                    status="blocked",
+                    details={"reason": "missing_session_video"},
+                )
+            )
+        return trace
 
     @staticmethod
-    def _assistant_message(message: str, preferences: list[DisplayPreference]) -> str:
-        if DisplayPreference.TABLE_ONLY in preferences:
-            return "The trend has been reduced to a table-first view with supporting evidence because you requested a table-oriented output."
-        if DisplayPreference.PREFER_VIDEO in preferences:
-            return "The response prioritizes video review because your prompt indicates you want supporting visual session evidence."
-        if "compare" in message.lower():
-            return "The console assembled a comparison-focused response using controlled cards, trend evidence, and a supporting metric table."
-        return "The console assembled a summary, chart, table, evidence, video, and formula explanation using controlled visual modules."
+    def _assistant_message(message: str, console_state: dict[str, Any]) -> str:
+        if console_state.get("mode") != "executed":
+            stage_names = [stage.get("name") for stage in console_state.get("execution_plan", {}).get("stages", [])]
+            return (
+                f'I planned the tool chain for "{message}"'
+                f" ({' -> '.join(stage_names)}), but this session has no uploaded video, so the analysis could not run yet."
+            )
+
+        run_detail: RunDetailResponse = console_state["run_detail"]
+        metrics = {item.name: item.value for item in run_detail.metrics}
+        metric_fragments = [f"{name}={value:.4f}" for name, value in sorted(metrics.items())]
+        recommendation = console_state.get("recommendation") or run_detail.run.summary.get("last_stage_summary", {}).get("recommendations", [""])[0]
+        return (
+            f'I ran {len(run_detail.run.stage_results)} stages for "{message}"'
+            f" on run {run_detail.run.run_id}. "
+            f"Observed metrics: {', '.join(metric_fragments) if metric_fragments else 'no metric outputs were produced'}. "
+            f"{recommendation}"
+        )
+
+    @staticmethod
+    def _build_evidence_context(console_state: dict[str, Any]) -> EvidenceContext:
+        if console_state.get("mode") == "executed":
+            run_detail: RunDetailResponse = console_state["run_detail"]
+            metric_names = [item.name for item in run_detail.metrics]
+            return EvidenceContext(
+                metric_definition=", ".join(metric_names) if metric_names else "no_metrics",
+                time_range="current run",
+                data_quality="Metrics were produced by the executed LangGraph tool chain.",
+                clinician_reviewed=False,
+                derived_metric=bool(metric_names),
+                references=[
+                    run_detail.run.run_id,
+                    run_detail.run.execution_plan.plan_id if run_detail.run.execution_plan is not None else "unknown-plan",
+                    *(run_detail.run.input_asset_ids[:1]),
+                ],
+            )
+
+        execution_plan = console_state.get("execution_plan", {})
+        return EvidenceContext(
+            metric_definition="execution_plan_preview",
+            time_range="pre-run",
+            data_quality="No run output is available because the session has no uploaded video.",
+            clinician_reviewed=False,
+            derived_metric=False,
+            references=[
+                execution_plan.get("plan_id", "unknown-plan"),
+                *(stage.get("name", "unknown_stage") for stage in execution_plan.get("stages", [])),
+            ],
+        )
 
     def _find_next_queued_run(self) -> RunRecord | None:
         for run in self.container.metadata.list_runs():

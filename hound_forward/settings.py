@@ -32,6 +32,7 @@ class WorkerRuntimeSettings(BaseModel):
 class AgentRuntimeSettings(BaseModel):
     llm_model: str
     recursion_limit: int
+    planner_mode: str
 
 
 class PlatformSettings(BaseSettings):
@@ -57,6 +58,7 @@ class PlatformSettings(BaseSettings):
     formula_evaluation_mode: str = "scaffold"
     llm_model: str = "gpt-4o-mini"
     agent_recursion_limit: int = 12
+    planner_mode: str = "hybrid"
 
     def artifact_root_path(self) -> Path:
         path = Path(self.artifact_root)
@@ -94,4 +96,8 @@ class PlatformSettings(BaseSettings):
 
     @property
     def agent_runtime(self) -> AgentRuntimeSettings:
-        return AgentRuntimeSettings(llm_model=self.llm_model, recursion_limit=self.agent_recursion_limit)
+        return AgentRuntimeSettings(
+            llm_model=self.llm_model,
+            recursion_limit=self.agent_recursion_limit,
+            planner_mode=self.planner_mode,
+        )

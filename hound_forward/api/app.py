@@ -9,11 +9,13 @@ from hound_forward.adapters.metadata.azure_postgres import AzurePostgresMetadata
 from hound_forward.adapters.queue.in_memory import InMemoryJobQueue
 from hound_forward.adapters.storage.local import LocalArtifactStore
 from hound_forward.agent_tools import AgentToolExecutor
+from hound_forward.agent_system.chat import ChatOrchestrator
 from hound_forward.agent_system.graphs.research_graph import ResearchGraph
-from hound_forward.agent_system.planners.experiment_planner import ExperimentManifestPlanner
+from hound_forward.agent_system.planners import build_planner
 from hound_forward.agent_system.tools.registry import ToolRegistry
 from hound_forward.application import ResearchPlatformService, ServiceContainer
 from hound_forward.domain import (
+    ChatRequest,
     ConsoleAgentRequest,
     ExecutionPlan,
     ExperimentManifest,
@@ -93,18 +95,25 @@ def build_service() -> ResearchPlatformService:
 @lru_cache(maxsize=1)
 def build_graph() -> ResearchGraph:
     service = build_service()
-    planner = ExperimentManifestPlanner(
-        default_runner=PlatformSettings().default_runner,
+    settings = PlatformSettings()
+    planner = build_planner(
+        settings=settings,
         available_tools=service.container.tool_runner.describe_tools() if service.container.tool_runner else [],
     )
     tools = ToolRegistry(service)
     return ResearchGraph(planner=planner, tools=tools)
 
 
+@lru_cache(maxsize=1)
+def build_chat_orchestrator() -> ChatOrchestrator:
+    return ChatOrchestrator(service=build_service(), settings=PlatformSettings())
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title=PlatformSettings().api_title)
     service = build_service()
     graph = build_graph()
+    chat_orchestrator = build_chat_orchestrator()
 
     @app.get("/health")
     def health() -> dict:
@@ -269,8 +278,8 @@ def create_app() -> FastAPI:
 
     @app.post("/agent/plan")
     def agent_plan(request: AgentPlanRequest) -> dict:
-        planner = ExperimentManifestPlanner(
-            default_runner=PlatformSettings().default_runner,
+        planner = build_planner(
+            settings=PlatformSettings(),
             available_tools=service.container.tool_runner.describe_tools() if service.container.tool_runner else [],
         )
         manifest = planner.plan(goal=request.goal)
@@ -280,6 +289,20 @@ def create_app() -> FastAPI:
     @app.post("/agent/execute-plan")
     def agent_execute_plan(request: AgentPlanRequest) -> dict:
         return graph.invoke(goal=request.goal, session_id=request.session_id)
+
+    @app.post("/api/chat")
+    def api_chat(request: ChatRequest) -> dict:
+        try:
+            response = chat_orchestrator.handle(
+                session_id=request.session_id,
+                message=request.message,
+                context=request.context,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return response.model_dump(mode="json")
 
     @app.post("/agent/console/respond")
     def agent_console_respond(request: ConsoleAgentRequest) -> dict:

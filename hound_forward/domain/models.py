@@ -324,6 +324,18 @@ class DisplayPreference(StrEnum):
     EVIDENCE_FIRST = "evidence_first"
 
 
+class ChatIntent(StrEnum):
+    RUN_ANALYSIS = "run_analysis"
+    ASK_QUESTION = "ask_question"
+    EXPLAIN_RESULT = "explain_result"
+
+
+class ChatResponseType(StrEnum):
+    TEXT = "text"
+    RUN = "run"
+    ERROR = "error"
+
+
 class ConsoleViewMode(StrEnum):
     SUMMARY = "summary"
     CHART = "chart"
@@ -345,6 +357,13 @@ class ActiveContext(BaseModel):
     metric_name: str | None = None
     formula_definition_id: str | None = None
     asset_id: str | None = None
+
+
+class ChatContext(BaseModel):
+    run_id: str | None = None
+    asset_ids: list[str] = Field(default_factory=list)
+    metric_name: str | None = None
+    formula_definition_id: str | None = None
 
 
 class HighlightItem(BaseModel):
@@ -512,6 +531,20 @@ class ConsoleAgentRequest(BaseModel):
     message: str
     display_preferences: list[DisplayPreference] = Field(default_factory=list)
     active_context: ActiveContext | None = None
+
+
+class ChatRequest(BaseModel):
+    session_id: str
+    message: str
+    context: ChatContext | None = None
+
+
+class ChatResponse(BaseModel):
+    type: ChatResponseType
+    message: str
+    run_id: str | None = None
+    progress_messages: list[str] = Field(default_factory=list)
+    structured_data: dict[str, Any] = Field(default_factory=dict)
 
 
 class ConsoleAgentResponse(BaseModel):
