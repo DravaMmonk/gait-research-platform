@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import { CopilotKitInspector, useCopilotKit } from "@copilotkitnext/react";
@@ -79,7 +79,7 @@ export function CopilotAgentConsole() {
   const [archivedSessionIds, setArchivedSessionIds] = useState<string[]>([]);
   const [isArchivedExpanded, setIsArchivedExpanded] = useState(false);
 
-  const setActiveSession = useCallback((sessionId: string, availableSessions: ConsoleSession[] = sessions) => {
+  function setActiveSession(sessionId: string, availableSessions: ConsoleSession[] = sessions) {
     setThreadId(sessionId);
     if (sessionId) {
       window.localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, sessionId);
@@ -89,9 +89,9 @@ export function CopilotAgentConsole() {
     }
     window.localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
     setStatus("No active session");
-  }, [sessions]);
+  }
 
-  const refreshSessions = useCallback(async (preferredSessionId?: string) => {
+  async function refreshSessions(preferredSessionId?: string) {
     const response = await fetch("/api/console/session", {
       method: "GET",
       cache: "no-store",
@@ -115,9 +115,9 @@ export function CopilotAgentConsole() {
         : visibleSessions[0]?.session_id ?? "";
     setActiveSession(nextSessionId, loadedSessions);
     return loadedSessions;
-  }, [setActiveSession]);
+  }
 
-  const createSession = useCallback(async (options?: { replaceStatus?: string }) => {
+  async function createSession(options?: { replaceStatus?: string }) {
     setIsBusy(true);
     try {
       const response = await fetch("/api/console/session", {
@@ -142,60 +142,47 @@ export function CopilotAgentConsole() {
     } finally {
       setIsBusy(false);
     }
-  }, [refreshSessions]);
+  }
 
   useEffect(() => {
     window.localStorage.removeItem("cpk:inspector:hidden");
     window.localStorage.removeItem("cpk:inspector:state");
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function initialize() {
-      try {
-        const response = await fetch("/api/console/session", {
-          method: "GET",
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          throw new Error("Unable to load sessions.");
-        }
-
-        const payload = (await response.json()) as SessionListResponse;
-        if (cancelled) {
-          return;
-        }
-
-        const loadedSessions = sortSessionsByMostRecent(payload.sessions ?? []);
-        const archivedIds = JSON.parse(window.localStorage.getItem(ARCHIVED_SESSION_STORAGE_KEY) ?? "[]") as unknown[];
-        const normalizedArchivedIds = archivedIds.filter((value): value is string => typeof value === "string");
-        setArchivedSessionIds(normalizedArchivedIds);
-        if (loadedSessions.length === 0) {
-          await createSession({ replaceStatus: "Created a new session" });
-          return;
-        }
-
-        setSessions(loadedSessions);
-        const persisted = window.localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
-        const visibleSessions = loadedSessions.filter((session) => !normalizedArchivedIds.includes(session.session_id));
-        const selected =
-          visibleSessions.find((session) => session.session_id === persisted)?.session_id ?? visibleSessions[0]?.session_id ?? "";
-        setActiveSession(selected, loadedSessions);
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-        setStatus(error instanceof Error ? error.message : "Unable to load sessions.");
+  const initializeSessions = useEffectEvent(async () => {
+    try {
+      const response = await fetch("/api/console/session", {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error("Unable to load sessions.");
       }
+
+      const payload = (await response.json()) as SessionListResponse;
+      const loadedSessions = sortSessionsByMostRecent(payload.sessions ?? []);
+      const archivedIds = JSON.parse(window.localStorage.getItem(ARCHIVED_SESSION_STORAGE_KEY) ?? "[]") as unknown[];
+      const normalizedArchivedIds = archivedIds.filter((value): value is string => typeof value === "string");
+      setArchivedSessionIds(normalizedArchivedIds);
+      if (loadedSessions.length === 0) {
+        await createSession({ replaceStatus: "Created a new session" });
+        return;
+      }
+
+      setSessions(loadedSessions);
+      const persisted = window.localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+      const visibleSessions = loadedSessions.filter((session) => !normalizedArchivedIds.includes(session.session_id));
+      const selected =
+        visibleSessions.find((session) => session.session_id === persisted)?.session_id ?? visibleSessions[0]?.session_id ?? "";
+      setActiveSession(selected, loadedSessions);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Unable to load sessions.");
     }
+  });
 
-    void initialize();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [createSession, setActiveSession]);
+  useEffect(() => {
+    void initializeSessions();
+  }, []);
 
   function archiveSession(sessionId: string) {
     const nextArchivedIds = archivedSessionIds.includes(sessionId) ? archivedSessionIds : [...archivedSessionIds, sessionId];
