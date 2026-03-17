@@ -66,7 +66,7 @@ PySR must not be embedded directly inside agent logic, API handlers, or storage 
 
 The recommended boundary is:
 
-- PySR runs as a compute module behind the existing `research_tools` contract
+- PySR runs as a compute module behind the `hound_forward.agent_tools` contract
 - orchestration invokes it through a tool runner
 - all persistence remains outside the PySR module
 
@@ -365,7 +365,7 @@ The PySR engine should be introduced as a self-contained module with a narrow pu
 Suggested shape:
 
 ```text
-research_tools/
+hound_forward/agent_tools/
   symbolic/
     pysr_engine.py
     io_models.py
@@ -459,7 +459,7 @@ The recommended rollout is staged.
 
 ### Stage 1. Engine encapsulation
 
-Introduce PySR as an isolated research module behind the `research_tools` boundary.
+Introduce PySR as an isolated research module behind the `hound_forward.agent_tools` boundary.
 
 ### Stage 2. Manifest-driven search
 

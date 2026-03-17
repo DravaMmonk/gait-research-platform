@@ -16,7 +16,7 @@ This stage prepares the platform to host an AI-assisted formula factory without 
 
 ## Compute Boundary
 
-`research_tools` is the approved compute toolkit boundary for reusable research capabilities.
+`hound_forward.agent_tools` is the approved compute toolkit boundary for reusable research capabilities.
 
 Its contract remains:
 
@@ -47,7 +47,7 @@ The platform wraps this toolkit through a tool runner adapter rather than duplic
 Future formula work should:
 
 1. build on the existing formula records
-2. reuse `research_tools` where possible
+2. reuse `hound_forward.agent_tools` where possible
 3. route execution through staged runs
 4. keep human validation as a first-class audit surface
 5. standardize symbolic search on PySR as the core engine while preserving module isolation from orchestration and persistence concerns

@@ -2,29 +2,29 @@
 
 ## Purpose
 
-This document defines the source of truth for the `frontend/research_console` redesign.
+This document defines the source of truth for the `frontend/research_console` application shell and the hidden `/dev` reference surface.
 
-The console is a chat-first research workspace, not a generic dashboard and not a free-form chatbot. The agent is the main interaction surface, but every result must render through predefined visual modules with stable evidence-aware framing.
+The product is a chat-first agent console, not a generic dashboard and not a free-form chatbot. The public surface is the single chat route at `/`. The hidden `/dev` route is an internal reference library for controlled visual modules and backend tool contracts.
 
 ## Product Model
 
 The research console follows this pattern:
 
 - agent-centric orchestration
-- predefined visual modules
-- schema-based rendering
-- user-overridable view intent
-- evidence-aware display
+- controlled rendering contracts
+- schema-based display surfaces
+- evidence-aware framing
+- hidden internal reference tooling
 
-The agent interprets intent, selects data and presentation modules, and returns a structured response. The frontend renders that response without inventing new layout primitives.
+The agent interprets user intent and returns a response through the existing chat interface. The frontend uses predefined rendering contracts for modules and supporting metadata. The `/dev` library documents those contracts without becoming a second product surface.
 
 ## Core UX Principles
 
 ### 1. Chat-first entry
 
 - The primary product home is the research console.
-- The conversation thread is the main workspace entry.
-- Text responses are only one part of the result surface.
+- The conversation thread is the only public entry point.
+- The homepage must stay simple, direct, and end-user-facing.
 
 ### 2. Controlled module rendering
 
@@ -35,61 +35,63 @@ The agent interprets intent, selects data and presentation modules, and returns 
 ### 3. Evidence-aware output
 
 - Important analytical output must carry provenance.
-- Views should expose metric definition, data quality, and review status.
-- Evidence must remain visible without forcing users to open a separate audit workflow.
+- Module contracts should preserve metric definition, review status, and supporting references.
+- Long formulas, IDs, paths, and JSON payloads must remain width-safe.
 
 ### 4. Stable operational shell
 
-- Use a persistent sidebar and top context bar.
-- Keep the main workspace width-stable under long text, formulas, and IDs.
-- Dynamic result content must scroll inside its own containers.
+- The shell should feel like a professional research application, not a marketing page.
+- The public chat surface and the hidden `/dev` surface must share the same tokens, spacing, type scale, and panel language.
+- Dynamic content must scroll inside fixed containers rather than stretching the page shell.
 
 ### 5. Shared primitives over page-local styling
 
-- All pages reuse the same shell, panel, badge, and metadata primitives.
-- Operational pages such as `Experiments`, `Runs`, `Metrics`, and `Datasets` are secondary workspaces inside the same console system.
+- Shared shell, panel, badge, and metadata primitives should be reused across the homepage and `/dev`.
+- `/dev` must reuse the same visual language as the public chat route rather than introducing preview-only styling.
 
-## Shell Architecture
+## Public Surface
 
-The shell has three permanent layers:
+The public application surface is intentionally narrow:
 
-1. Left sidebar
-   - top-level navigation
-   - workspace identity
-   - console mode summary
-2. Top context bar
-   - page title
-   - short task-oriented description
-3. Work surface
-   - conversation
-   - module result area
-   - inspector rail
+- route: `/`
+- function: chat with the agent
+- styling: neutral research tone with olive primary accents
+- layout: fixed shell with internal message scrolling
+- navigation: no public link to `/dev`
 
-The shell should feel closer to an engineering or research console than to a landing page.
+The public UI should not expose mock galleries, dashboard leftovers, or developer preview content.
 
-## Research Console Layout
+## Hidden Developer Surface
 
-The main console page contains:
+The `/dev` route is a hidden internal reference library. It exists for implementation validation and design-system continuity, not for end users.
 
-- conversation thread
-- structured assistant summary
-- fixed view mode tabs
-- rendered module stack
-- prompt composer
-- evidence inspector rail
-- tool trace panel
-- suggested follow-ups
+The `/dev` route must:
 
-Fixed view modes:
+- stay manually accessible only
+- present both frontend visual modules and backend agent tools
+- be data-driven through a shared typed registry
+- remain non-executable and non-networked
+- use the same tokens and shell language as `/`
 
-- `Summary`
-- `Chart`
-- `Table`
-- `Evidence`
-- `Video`
-- `Formula`
+## View Library Architecture
 
-These view modes are user-facing controls over already-returned structured content, not separate ad hoc fetch paths.
+The `/dev` library is organized into two sections:
+
+1. `Visual Modules`
+   - typed examples based on the `VisualModule` union
+   - rendered through the same `ModuleRenderer` used by product surfaces
+2. `Agent Tools`
+   - static contract previews that mirror `hound_forward/agent_tools/executor.py`
+   - example input and output payloads for reference only
+
+The page should support:
+
+- section switching
+- search
+- category filtering
+- tag filtering
+- detail selection
+- width-safe rendering of structured payloads
 
 ## Visual Module Registry
 
@@ -119,38 +121,33 @@ Each module must:
 - `video_panel` belongs to video views
 - `formula_explanation_card` belongs to formula views
 
-The frontend may filter the returned module list by active view mode, but it must not mutate module semantics.
+The module registry used by `/dev` must reuse these contracts directly rather than inventing a second preview schema.
 
-## Natural Language Overrides
+## Tool Contract Library
 
-The system should support both:
+The tool library should mirror the executor-backed registry in `hound_forward/agent_tools/executor.py`.
 
-- implicit display selection by agent reasoning
-- explicit user override through prompt language
+Each tool entry should expose:
 
-Supported examples:
+- tool name
+- purpose
+- input kind
+- output kind
+- output artifact name
+- frontend-safe example input payload
+- frontend-safe example output payload
+- source module path
 
-- `show as table`
-- `table only`
-- `show raw values`
-- `open video first`
-- `show evidence`
-- `plot this`
+The tool library is a reference view, not a live execution console.
 
-The frontend should also expose fixed controls so users do not need to learn prompt syntax to switch views.
+## Evidence And Stability Requirements
 
-## Evidence Requirements
-
-Every clinically relevant or research-critical view should expose enough context to answer:
+Every clinically relevant or research-critical module should preserve enough context to answer:
 
 - what metric is this
 - what formula or definition produced it
-- what time range is covered
-- what is the data quality state
-- has it been clinician reviewed
 - what source run, session, or asset supports it
-
-The inspector rail is the default place for shared evidence context. Module-local evidence details may supplement it.
+- what review state or confidence applies
 
 ## Styling Direction
 
@@ -159,21 +156,23 @@ The inspector rail is the default place for shared evidence context. Module-loca
 - Use green as the primary active accent
 - Use ember selectively for emphasis, not as the default interface color
 - Prefer dense but readable panels over oversized decorative cards
+- Prefer light borders and light shadows over glass effects or oversized radii
 
 The previous serif-heavy hero scaffold is retired and should not be reintroduced.
 
 ## Implementation Notes
 
-- Reuse `recharts` for chart modules
-- Keep frontend module selection schema-aligned with backend response types
-- Keep mock fixtures typed and close to the API contract
-- Avoid page-local hardcoded data structures that bypass the shared response model
+- Keep module examples in a shared typed registry
+- Mirror tool metadata from the backend executor contract
+- Reuse existing renderers and shared primitives instead of introducing preview-only forks
+- Avoid page-local hardcoded preview composition
+- Keep `/dev` hidden and non-executable
 
 ## Review Checklist
 
-- Does the console feel like a research workspace rather than a dashboard showcase?
-- Can the agent return text plus structured modules in one result surface?
-- Are modules selected from a fixed registry rather than generated ad hoc?
-- Is evidence context visible and traceable?
-- Do long formulas, paths, IDs, and notes stay inside their containers?
-- Do `Experiments`, `Runs`, `Metrics`, and `Datasets` still look like part of the same product?
+- Does `/` remain a clean end-user chat surface?
+- Does `/dev` stay hidden from the public UI?
+- Are modules rendered from the `VisualModule` contract rather than a separate preview shape?
+- Are tool entries aligned with `hound_forward/agent_tools/executor.py`?
+- Do search, filters, and selection work without layout breakage?
+- Do long formulas, paths, IDs, JSON payloads, and notes stay inside their containers?

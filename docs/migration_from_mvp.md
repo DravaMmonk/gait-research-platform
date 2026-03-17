@@ -13,7 +13,7 @@ The new source of truth is:
 
 ## What Was Preserved
 
-The existing `gait_research_platform` package remains available as a legacy research algorithm surface. Signal builders, representation models, and experiment modules can be migrated incrementally into the new platform execution layer.
+Legacy research modules have been retired from the runtime path. All new execution is expected to move through `hound_forward.agent_tools` and the LangGraph-managed execution plan.
 
 ## What Was Retired
 

@@ -278,7 +278,7 @@ The agent may draft a manifest, but it may not expand beyond the platform-approv
 The manifest should be stored like a protocol artifact:
 
 ```text
-experiments/
+hound_forward/manifests/examples/
   gait_asymmetry_v1.yaml
   gait_asymmetry_v2.yaml
   fatigue_detection_v1.yaml

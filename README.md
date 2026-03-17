@@ -5,18 +5,17 @@ Hound Forward is now structured as an Azure-aligned, AI-native research platform
 - a run-centric metadata layer backed by Azure PostgreSQL semantics
 - Azure Blob-aligned artifact storage
 - queue-driven compute orchestration
-- LangGraph-based agent orchestration through typed tools
+- LangGraph-based agent orchestration through modular internal tools
 - a research console scaffold for experiments, runs, metrics, datasets, and agent workflows
 
 ## Repository Layout
 
-- `hound_forward/`: platform domain, application services, adapters, API, agent orchestration, and deterministic local worker
-- `gait_research_platform/`: reusable legacy research algorithms kept as a compatibility surface while the platform migrates
+- `hound_forward/`: platform domain, application services, adapters, API, agent orchestration, modular tools, and deterministic local worker
+- `hound_forward/manifests/`: versioned manifest examples for agent-planned protocol runs
 - `db/schema.sql`: Azure PostgreSQL schema for metadata
 - `infra/azure/`: Bicep scaffold for Azure infrastructure
 - `frontend/research_console/`: Next.js research UI scaffold
 - `docs/`: platform architecture, agent architecture, deployment, and migration notes
-- `research_tools/`: platform-approved compute toolkit boundary exposed from `gait_research_platform/research_tools/`
 
 ## Core Model
 
@@ -31,26 +30,27 @@ The platform centers on these primary resources:
 
 All experiment, metric evaluation, and agent analysis activity is modeled as a run. Azure Blob stores large artifacts. Azure PostgreSQL stores metadata only.
 
-## Runtime Validation
+## Agent Tool Runtime
 
-The current runtime slice is intentionally a runtime validation path, not a real CV pipeline.
+The current runtime slice is an agent-designed modular tool chain, not a production CV pipeline.
 
-- `Dummy`: deterministic orchestration-safe computation
-- `Fake`: synthetic keypoints and metrics not derived from a production pose model
-- `Placeholder`: scaffolded worker, UI, or agent bridge that proves the run contract
+- `LangGraph planner`: selects the tool chain for a goal
+- `Agent tools`: execute modular stages such as video decode, keypoint extraction, metrics, and reporting
+- `Local worker bridge`: drains queued runs so the same run contract can be exercised locally
 
 The validated slice is:
 
 ```text
 upload video
+-> agent plans tool chain
 -> create run
 -> enqueue job
--> worker pipeline
--> fake metrics output
+-> worker executes modular tools
+-> tool-chain metrics output
 -> agent reads result
 ```
 
-The dummy pipeline writes:
+The default tool chain writes:
 
 - `keypoints.json`
 - `metrics.json`
@@ -58,12 +58,11 @@ The dummy pipeline writes:
 
 ## Formula Infrastructure
 
-The repository now includes infrastructure seams for a future formula factory without implementing formula business logic yet.
+The repository includes infrastructure seams for formula-oriented evaluation without implementing formula business logic yet.
 
 - `formula_definitions`, `formula_proposals`, `formula_evaluations`, and `formula_reviews` are scaffolded as metadata records
 - formula-related runs are supported through dedicated `RunKind` values
-- worker execution is prepared for staged execution plans
-- `research_tools` is the approved compute-tool boundary for future formula and metric evaluations
+- worker execution is driven by agent-designed staged execution plans
 
 This stage prepares storage, execution, and review infrastructure. It does not implement formula DSL execution or clinician workflow logic yet.
 
@@ -112,6 +111,7 @@ See:
 
 - [docs/platform_architecture.md](/Users/drava/Documents/Hound/hf-playground/docs/platform_architecture.md)
 - [docs/agent_architecture.md](/Users/drava/Documents/Hound/hf-playground/docs/agent_architecture.md)
+- [docs/module_layout.md](/Users/drava/Documents/Hound/hf-playground/docs/module_layout.md)
 - [docs/deployment_azure.md](/Users/drava/Documents/Hound/hf-playground/docs/deployment_azure.md)
 - [docs/frontend_design_spec.md](/Users/drava/Documents/Hound/hf-playground/docs/frontend_design_spec.md)
 - [docs/migration_from_mvp.md](/Users/drava/Documents/Hound/hf-playground/docs/migration_from_mvp.md)

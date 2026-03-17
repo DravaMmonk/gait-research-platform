@@ -34,10 +34,10 @@ The platform core manages:
 
 The current compute path is a runtime validation slice:
 
-- `DummyRuntimeValidationPipeline`: deterministic fake computation
+- `PlatformRunExecutor`: executes agent-designed modular tool stages
 - `LocalArtifactStore`: placeholder local storage adapter
 - `InMemoryQueue`: placeholder local queue
-- `PlaceholderLocalWorkerBridge`: placeholder local worker boundary for agent and local testing
+- `PlaceholderLocalWorkerBridge`: local worker boundary for agent and local testing
 
 The pipeline ingests one uploaded video asset plus a manifest and produces structured fake outputs.
 
@@ -55,15 +55,14 @@ LangGraph generates manifests, launches runs through tools, reads structured out
 
 ### Research Console
 
-The Next.js scaffold reserves routes for:
+The Next.js frontend currently exposes:
 
-- `/experiments`
-- `/runs`
-- `/metrics`
-- `/datasets`
-- `/agent-lab`
+- `/`
+  - the public CopilotKit-based agent console
+- `/dev`
+  - a hidden internal view library for visual modules and agent tool contracts
 
-The current UI is a placeholder Run Explorer focused on one uploaded video, one run, and one fake metric output set.
+The public surface is intentionally chat-first and narrow. Preview content, module galleries, and tool contract references live in the hidden `/dev` route rather than the homepage.
 
 ## Azure Mapping
 
