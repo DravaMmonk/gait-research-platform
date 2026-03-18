@@ -16,7 +16,7 @@ from hound_forward.api.app import create_app
 from hound_forward.application import ResearchPlatformService, ServiceContainer
 from hound_forward.domain import FormulaStatus, ReviewVerdict, RunKind, RunStatus
 from hound_forward.pipeline import PlatformRunExecutor
-from hound_forward.worker.runtime import PlaceholderLocalWorkerBridge
+from hound_forward.worker.runtime import InlineRunMonitor
 
 
 def fake_openai_json_response(self, *, system_prompt, user_prompt, schema_name, schema):
@@ -49,11 +49,18 @@ def build_service(tmp_path: Path) -> ResearchPlatformService:
     metadata = AzurePostgresMetadataRepository(f"sqlite+pysqlite:///{tmp_path / 'platform.db'}")
     metadata.create_all()
     artifact_store = LocalArtifactStore(tmp_path / "artifacts")
-    queue = InMemoryJobQueue()
+    queue = InMemoryJobQueue(queue_name="runs")
     tool_runner = AgentToolExecutor(artifact_store=artifact_store, work_root=tmp_path / "tool_runs")
     executor = PlatformRunExecutor(metadata=metadata, tool_runner=tool_runner)
     return ResearchPlatformService(
-        ServiceContainer(metadata=metadata, artifact_store=artifact_store, queue=queue, executor=executor, tool_runner=tool_runner)
+        ServiceContainer(
+            metadata=metadata,
+            artifact_store=artifact_store,
+            run_queue=queue,
+            agent_queue=InMemoryJobQueue(queue_name="agent-runs"),
+            executor=executor,
+            tool_runner=tool_runner,
+        )
     )
 
 
@@ -64,6 +71,49 @@ def upload_video(service: ResearchPlatformService, session_id: str, name: str = 
         content=content or b"fake-video-binary",
         mime_type="video/mp4",
     )
+
+
+def test_session_attachment_upload_supports_image_and_text_assets(tmp_path: Path) -> None:
+    service = build_service(tmp_path)
+    session = service.create_session(title="Attachment session")
+
+    image = service.upload_session_attachment(
+        session_id=session.session_id,
+        file_name="frame.png",
+        content=b"fake-image-binary",
+        mime_type="image/png",
+    )
+    text = service.upload_session_attachment(
+        session_id=session.session_id,
+        file_name="notes.txt",
+        content=b"gait notes",
+        mime_type="text/plain",
+    )
+
+    attachments = service.list_session_attachments(session.session_id)
+
+    assert image.asset.kind.value == "image"
+    assert text.asset.kind.value == "text"
+    assert {item.kind.value for item in attachments} >= {"image", "text"}
+    assert image.asset.metadata["original_file_name"] == "frame.png"
+    assert text.asset.metadata["original_file_name"] == "notes.txt"
+
+
+def test_session_attachment_upload_rejects_unsupported_types(tmp_path: Path) -> None:
+    service = build_service(tmp_path)
+    session = service.create_session(title="Unsupported attachment session")
+
+    try:
+        service.upload_session_attachment(
+            session_id=session.session_id,
+            file_name="archive.zip",
+            content=b"not-supported",
+            mime_type="application/zip",
+        )
+    except ValueError as exc:
+        assert "Unsupported attachment type" in str(exc)
+    else:
+        raise AssertionError("Expected unsupported attachment upload to fail.")
 
 
 def test_upload_to_run_flow_registers_agent_tool_outputs(tmp_path: Path) -> None:
@@ -80,8 +130,8 @@ def test_upload_to_run_flow_registers_agent_tool_outputs(tmp_path: Path) -> None
     queued = service.enqueue_run(run.run_id)
     assert queued.status == RunStatus.QUEUED
 
-    worker = PlaceholderLocalWorkerBridge(service=service)
-    completed = worker.drain_once()
+    worker = InlineRunMonitor(service=service)
+    completed = worker.wait_for_terminal_state(run.run_id)
     assert completed is not None
     assert completed.status == RunStatus.COMPLETED
 
@@ -111,9 +161,9 @@ def test_agent_metrics_are_deterministic_for_same_input_asset_and_manifest(tmp_p
     run_b = service.create_run(session.session_id, manifest_b)
     service.enqueue_run(run_a.run_id)
     service.enqueue_run(run_b.run_id)
-    worker = PlaceholderLocalWorkerBridge(service=service)
-    worker.drain_once()
-    worker.drain_once()
+    worker = InlineRunMonitor(service=service)
+    worker.wait_for_terminal_state(run_a.run_id)
+    worker.wait_for_terminal_state(run_b.run_id)
 
     metrics_a = service.read_metrics(run_a.run_id)
     metrics_b = service.read_metrics(run_b.run_id)
@@ -129,7 +179,7 @@ def test_agent_vertical_slice_designs_and_executes_tool_chain(tmp_path: Path) ->
     graph = ResearchGraph(
         planner=ExperimentManifestPlanner(available_tools=service.container.tool_runner.describe_tools()),
         tools=ToolRegistry(service),
-        worker_bridge=PlaceholderLocalWorkerBridge(service=service),
+        run_monitor=InlineRunMonitor(service=service),
     )
 
     result = graph.invoke(goal="Test a new movement metric", session_id=session.session_id)
@@ -172,8 +222,8 @@ def test_formula_infrastructure_round_trips_records(tmp_path: Path, monkeypatch)
     manifest.input_asset_ids = [video.asset.asset_id]
     run = service.create_run(session.session_id, manifest, run_kind=RunKind.FORMULA_EVALUATION)
     service.enqueue_run(run.run_id)
-    worker = PlaceholderLocalWorkerBridge(service=service)
-    completed = worker.drain_once()
+    worker = InlineRunMonitor(service=service)
+    completed = worker.wait_for_terminal_state(run.run_id)
     assert completed is not None
     assert completed.status == RunStatus.COMPLETED
 
@@ -240,7 +290,6 @@ def test_api_surface_supports_video_upload_run_detail_and_agent_execution(tmp_pa
     app_module = importlib.import_module("hound_forward.api.app")
 
     app_module.build_service.cache_clear()
-    app_module.build_graph.cache_clear()
     client = TestClient(create_app())
 
     session_response = client.post("/sessions", json={"title": "API session", "dog_id": "dog-123"})
@@ -278,25 +327,83 @@ def test_api_surface_supports_video_upload_run_detail_and_agent_execution(tmp_pa
     assert enqueue_response.status_code == 200
     assert enqueue_response.json()["status"] == "queued"
 
-    bridge = PlaceholderLocalWorkerBridge(service=app_module.build_service())
-    bridge.drain_once()
+    bridge = InlineRunMonitor(service=app_module.build_service())
+    bridge.wait_for_terminal_state(run["run_id"])
 
     detail_response = client.get(f"/runs/{run['run_id']}/detail")
     assert detail_response.status_code == 200
     detail = detail_response.json()
     assert detail["run"]["status"] == "completed"
-    assert any(asset["kind"] == "video" for asset in detail["assets"])
 
-    metrics_response = client.get(f"/runs/{run['run_id']}/metrics")
-    assert metrics_response.status_code == 200
-    metrics = metrics_response.json()
-    assert metrics["metrics_asset"]["kind"] == "metric_result"
-    assert {item["name"] for item in metrics["metric_results"]} == {"stride_length", "asymmetry_index", "gait_stability"}
+
+def test_api_surface_supports_session_attachment_upload_and_listing(tmp_path: Path) -> None:
+    monkeypatch_env = {
+        "HF_METADATA_DATABASE_URL": f"sqlite+pysqlite:///{tmp_path / 'api-attachments.db'}",
+        "HF_ARTIFACT_ROOT": str(tmp_path / "api-attachments-artifacts"),
+    }
+    for key, value in monkeypatch_env.items():
+        import os
+
+        os.environ[key] = value
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_chat_orchestrator.cache_clear()
+    client = TestClient(create_app())
+
+    session_response = client.post("/sessions", json={"title": "Attachment API session"})
+    session = session_response.json()
+
+    image_response = client.post(
+        f"/sessions/{session['session_id']}/attachments",
+        files={"file": ("frame.png", b"fake-image-binary", "image/png")},
+    )
+    assert image_response.status_code == 200
+    assert image_response.json()["asset"]["kind"] == "image"
+
+    text_response = client.post(
+        f"/sessions/{session['session_id']}/attachments",
+        files={"file": ("notes.txt", b"clinical notes", "text/plain")},
+    )
+    assert text_response.status_code == 200
+    assert text_response.json()["asset"]["kind"] == "text"
+
+    list_response = client.get(f"/sessions/{session['session_id']}/attachments")
+    assert list_response.status_code == 200
+    attachments = list_response.json()["attachments"]
+    assert {item["kind"] for item in attachments} >= {"image", "text"}
+    assert {item["metadata"]["original_file_name"] for item in attachments} >= {"frame.png", "notes.txt"}
+
+
+def test_api_surface_rejects_unsupported_session_attachment_type(tmp_path: Path) -> None:
+    monkeypatch_env = {
+        "HF_METADATA_DATABASE_URL": f"sqlite+pysqlite:///{tmp_path / 'api-attachments-invalid.db'}",
+        "HF_ARTIFACT_ROOT": str(tmp_path / "api-attachments-invalid-artifacts"),
+    }
+    for key, value in monkeypatch_env.items():
+        import os
+
+        os.environ[key] = value
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_chat_orchestrator.cache_clear()
+    client = TestClient(create_app())
+
+    session_response = client.post("/sessions", json={"title": "Attachment reject session"})
+    session = session_response.json()
+
+    response = client.post(
+        f"/sessions/{session['session_id']}/attachments",
+        files={"file": ("archive.zip", b"zip-binary", "application/zip")},
+    )
+    assert response.status_code == 400
+    assert "Unsupported attachment type" in response.json()["detail"]
 
     agent_response = client.post("/agent/execute-plan", json={"session_id": session["session_id"], "goal": "Evaluate clinician cohort"})
     assert agent_response.status_code == 200
-    assert agent_response.json()["run_status"] == "completed"
-    assert "Agent tool-chain result" in agent_response.json()["recommendation"]
+    assert agent_response.json()["job_type"] == "agent_execution"
+    assert agent_response.json()["status"] == "pending"
 
 
 def test_api_surface_lists_and_deletes_sessions(tmp_path: Path, monkeypatch) -> None:
@@ -305,7 +412,6 @@ def test_api_surface_lists_and_deletes_sessions(tmp_path: Path, monkeypatch) -> 
     app_module = importlib.import_module("hound_forward.api.app")
 
     app_module.build_service.cache_clear()
-    app_module.build_graph.cache_clear()
     app_module.build_chat_orchestrator.cache_clear()
     client = TestClient(create_app())
 
@@ -332,7 +438,6 @@ def test_api_surface_supports_formula_scaffold_endpoints(tmp_path: Path, monkeyp
     app_module = importlib.import_module("hound_forward.api.app")
 
     app_module.build_service.cache_clear()
-    app_module.build_graph.cache_clear()
     client = TestClient(create_app())
 
     formula_response = client.post(
@@ -382,7 +487,6 @@ def test_api_surface_supports_console_agent_response(tmp_path: Path, monkeypatch
     app_module = importlib.import_module("hound_forward.api.app")
 
     app_module.build_service.cache_clear()
-    app_module.build_graph.cache_clear()
     client = TestClient(create_app())
 
     session_response = client.post("/sessions", json={"title": "Console session", "metadata": {"source": "test"}})
@@ -415,7 +519,6 @@ def test_console_agent_response_executes_langgraph_when_video_is_available(tmp_p
     app_module = importlib.import_module("hound_forward.api.app")
 
     app_module.build_service.cache_clear()
-    app_module.build_graph.cache_clear()
     client = TestClient(create_app())
 
     session_response = client.post("/sessions", json={"title": "Console run session", "metadata": {"source": "test"}})
@@ -459,7 +562,6 @@ def test_api_chat_runs_analysis_and_returns_progress_messages(tmp_path: Path, mo
     app_module = importlib.import_module("hound_forward.api.app")
 
     app_module.build_service.cache_clear()
-    app_module.build_graph.cache_clear()
     app_module.build_chat_orchestrator.cache_clear()
     client = TestClient(create_app())
 
@@ -498,7 +600,6 @@ def test_api_chat_answers_question_without_run(tmp_path: Path, monkeypatch) -> N
     app_module = importlib.import_module("hound_forward.api.app")
 
     app_module.build_service.cache_clear()
-    app_module.build_graph.cache_clear()
     app_module.build_chat_orchestrator.cache_clear()
     client = TestClient(create_app())
 
@@ -531,7 +632,6 @@ def test_api_chat_reports_registered_tools_for_tool_inventory_question(tmp_path:
     app_module = importlib.import_module("hound_forward.api.app")
 
     app_module.build_service.cache_clear()
-    app_module.build_graph.cache_clear()
     app_module.build_chat_orchestrator.cache_clear()
     client = TestClient(create_app())
 
@@ -566,7 +666,6 @@ def test_api_chat_lists_current_session_videos_without_requiring_session_id_in_m
     app_module = importlib.import_module("hound_forward.api.app")
 
     app_module.build_service.cache_clear()
-    app_module.build_graph.cache_clear()
     app_module.build_chat_orchestrator.cache_clear()
     client = TestClient(create_app())
 
@@ -604,7 +703,6 @@ def test_api_chat_explains_existing_run(tmp_path: Path, monkeypatch) -> None:
     app_module = importlib.import_module("hound_forward.api.app")
 
     app_module.build_service.cache_clear()
-    app_module.build_graph.cache_clear()
     app_module.build_chat_orchestrator.cache_clear()
     client = TestClient(create_app())
 

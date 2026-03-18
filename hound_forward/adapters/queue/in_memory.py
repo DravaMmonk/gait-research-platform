@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from collections import deque
+from typing import ClassVar
 
 from hound_forward.ports import Job
 
 
 class InMemoryJobQueue:
-    def __init__(self) -> None:
-        self._jobs: deque[Job] = deque()
+    _queues: ClassVar[dict[str, deque[Job]]] = {}
+
+    def __init__(self, queue_name: str = "default") -> None:
+        self.queue_name = queue_name
+        self._jobs = self._queues.setdefault(queue_name, deque())
 
     def enqueue(self, job: Job) -> None:
         self._jobs.append(job)

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+from hound_forward.agent.runtime import AgentRuntime
 from hound_forward.bootstrap import build_service
 from hound_forward.settings import PlatformSettings
-from hound_forward.worker.runtime import QueueWorkerRuntime
 
 
 def main() -> None:
     settings = PlatformSettings()
     service = build_service(settings)
-    worker = QueueWorkerRuntime(service=service)
-    worker.run_forever(poll_interval_seconds=settings.worker_runtime.poll_interval_seconds)
+    runtime = AgentRuntime(service=service, settings=settings)
+    runtime.run_forever()
 
 
 if __name__ == "__main__":

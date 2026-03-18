@@ -9,6 +9,9 @@ description = "AI-driven gait research platform MVP"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+  "azure-identity>=1.25",
+  "azure-servicebus>=7.14",
+  "azure-storage-blob>=12.27",
   "fastapi>=0.135",
   "langgraph>=1.0",
   "matplotlib>=3.8",

@@ -6,7 +6,7 @@ from langgraph.graph import END, START, StateGraph
 
 from hound_forward.agent_system.planners.protocol import PlannerProtocol
 from hound_forward.agent_system.tools.registry import ToolRegistry
-from hound_forward.worker.runtime import PlaceholderLocalWorkerBridge
+from hound_forward.worker.runtime import PollingRunMonitor
 
 
 class ResearchGraphState(TypedDict, total=False):
@@ -27,11 +27,11 @@ class ResearchGraph:
         self,
         planner: PlannerProtocol,
         tools: ToolRegistry,
-        worker_bridge: PlaceholderLocalWorkerBridge | None = None,
+        run_monitor: PollingRunMonitor | None = None,
     ) -> None:
         self.planner = planner
         self.tools = tools
-        self.worker_bridge = worker_bridge or PlaceholderLocalWorkerBridge(service=tools.service)
+        self.run_monitor = run_monitor or PollingRunMonitor(service=tools.service)
         self.graph = self._build_graph().compile()
 
     def invoke(
@@ -105,13 +105,8 @@ class ResearchGraph:
         return {"run_status": response.status, "run_data": response.data}
 
     def _monitor_run_node(self, state: ResearchGraphState) -> ResearchGraphState:
-        response = self.tools.call("get_run", run_id=state["run_id"])
-        attempts = 0
-        while response.status in {"queued", "running", "created"} and attempts < 8:
-            self.worker_bridge.drain_once()
-            response = self.tools.call("get_run", run_id=state["run_id"])
-            attempts += 1
-        return {"run_status": response.status, "run_data": response.data}
+        run = self.run_monitor.wait_for_terminal_state(state["run_id"])
+        return {"run_status": run.status.value, "run_data": run.model_dump(mode="json")}
 
     def _fetch_results_node(self, state: ResearchGraphState) -> ResearchGraphState:
         metrics = self.tools.call("read_metrics", run_id=state["run_id"])

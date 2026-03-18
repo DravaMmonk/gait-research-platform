@@ -18,7 +18,7 @@ from hound_forward.domain import (
     ToolTraceItem,
 )
 from hound_forward.settings import PlatformSettings
-from hound_forward.worker.runtime import PlaceholderLocalWorkerBridge
+from hound_forward.worker.runtime import InlineRunMonitor, PollingRunMonitor
 
 from .intent_router import IntentRouter
 from .progress import build_progress_messages
@@ -107,10 +107,20 @@ class ChatOrchestrator:
         session = self.service.container.metadata.get_session(session_id)
         runs = self.service.list_runs(session_id=session_id)
         available_tools = ToolRegistry(self.service).describe_tools()
+        current_session_assets = [
+            {
+                "asset_id": asset.asset_id,
+                "file_name": asset.metadata.get("original_file_name") or Path(asset.blob_path).name,
+                "mime_type": asset.mime_type,
+                "kind": asset.kind.value,
+                "created_at": asset.created_at.isoformat(),
+            }
+            for asset in self.service.list_session_attachments(session_id)
+        ]
         current_session_videos = [
             {
                 "asset_id": asset.asset_id,
-                "file_name": Path(asset.blob_path).name,
+                "file_name": asset.metadata.get("original_file_name") or Path(asset.blob_path).name,
                 "mime_type": asset.mime_type,
                 "created_at": asset.created_at.isoformat(),
             }
@@ -123,8 +133,11 @@ class ChatOrchestrator:
             "latest_completed_run_id": next((run.run_id for run in reversed(runs) if run.status == RunStatus.COMPLETED), None),
             "available_tool_count": len(available_tools),
             "video_asset_count": len(current_session_videos),
+            "attachment_asset_count": len(current_session_assets),
         }
-        if self._is_current_session_video_question(message):
+        if self._is_current_session_asset_question(message):
+            answer = self._describe_current_session_assets(current_session_assets)
+        elif self._is_current_session_video_question(message):
             answer = self._describe_current_session_videos(current_session_videos)
         elif self._is_tool_inventory_question(message):
             answer = self.reasoner.describe_tools(
@@ -145,6 +158,7 @@ class ChatOrchestrator:
                 "intent": ChatIntent.ASK_QUESTION.value,
                 "context": session_summary,
                 "available_tools": available_tools,
+                "current_session_assets": current_session_assets,
                 "current_session_videos": current_session_videos,
             },
         )
@@ -156,10 +170,15 @@ class ChatOrchestrator:
         return planner
 
     def _build_graph(self, *, planner: Any) -> ResearchGraph:
+        run_monitor = (
+            InlineRunMonitor(service=self.service)
+            if self.settings.placeholder_worker_mode
+            else PollingRunMonitor(service=self.service)
+        )
         return ResearchGraph(
             planner=planner,
             tools=ToolRegistry(self.service),
-            worker_bridge=PlaceholderLocalWorkerBridge(service=self.service),
+            run_monitor=run_monitor,
         )
 
     def _resolve_source_run(self, *, session_id: str, context: ChatContext | None):
@@ -261,6 +280,13 @@ class ChatOrchestrator:
         )
 
     @staticmethod
+    def _is_current_session_asset_question(message: str) -> bool:
+        normalized = message.lower()
+        if not any(marker in normalized for marker in ("attachment", "attachments", "file", "files", "image", "text file")):
+            return False
+        return any(marker in normalized for marker in ("current session", "this session", "uploaded", "available", "list"))
+
+    @staticmethod
     def _describe_current_session_videos(current_session_videos: list[dict[str, str]]) -> str:
         if not current_session_videos:
             return "The current session has no uploaded video assets yet."
@@ -268,4 +294,14 @@ class ChatOrchestrator:
         lines = ["Uploaded video assets in the current session:"]
         for video in current_session_videos:
             lines.append(f"- {video['file_name']} ({video['mime_type']}, asset {video['asset_id']})")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _describe_current_session_assets(current_session_assets: list[dict[str, str]]) -> str:
+        if not current_session_assets:
+            return "The current session has no uploaded attachments yet."
+
+        lines = ["Uploaded attachments in the current session:"]
+        for asset in current_session_assets:
+            lines.append(f"- {asset['file_name']} ({asset['kind']}, {asset['mime_type']}, asset {asset['asset_id']})")
         return "\n".join(lines)

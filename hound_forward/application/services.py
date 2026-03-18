@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ from hound_forward.agent_tools import summarize_manifest
 
 from hound_forward.domain import (
     ActiveContext,
+    AssetKind,
     AssetRecord,
     ComparisonCardItem,
     ComparisonCardsModule,
@@ -32,6 +34,9 @@ from hound_forward.domain import (
     FormulaReviewRecord,
     FormulaStatus,
     HighlightItem,
+    JobRecord,
+    JobStatus,
+    JobType,
     MetricDefinition,
     MetricTableColumn,
     MetricTableModule,
@@ -47,6 +52,7 @@ from hound_forward.domain import (
     RunRecord,
     RunStatus,
     SessionRecord,
+    SessionAttachmentUploadResponse,
     SummaryCardModule,
     SummaryCardPayload,
     StageResult,
@@ -55,7 +61,6 @@ from hound_forward.domain import (
     ToolResponse,
     TrendChartModule,
     TrendChartPayload,
-    VideoUploadResponse,
     VideoPanelModule,
     VideoPanelPayload,
 )
@@ -70,7 +75,8 @@ def utc_now() -> datetime:
 class ServiceContainer:
     metadata: MetadataRepository
     artifact_store: ArtifactStore
-    queue: JobQueue
+    run_queue: JobQueue
+    agent_queue: JobQueue
     executor: RunExecutor
     tool_runner: ToolRunner | None = None
 
@@ -125,6 +131,33 @@ class ResearchPlatformService:
         self.container.metadata.register_asset(manifest_asset)
         return saved
 
+    def upload_session_attachment(
+        self,
+        *,
+        session_id: str,
+        file_name: str,
+        content: bytes,
+        mime_type: str,
+    ) -> SessionAttachmentUploadResponse:
+        session = self.container.metadata.get_session(session_id)
+        if session is None:
+            raise KeyError(f"Unknown session_id: {session_id}")
+        asset_kind = self._resolve_session_attachment_kind(file_name=file_name, mime_type=mime_type)
+        asset = self.container.artifact_store.put_bytes(
+            session_id=session_id,
+            name=self._build_session_attachment_name(file_name),
+            content=content,
+            kind=asset_kind.value,
+            mime_type=mime_type,
+            metadata={
+                "original_file_name": file_name,
+                "placeholder_flags": {"dummy": True, "fake": False, "placeholder": True},
+                "runtime_validation": True,
+            },
+        )
+        registered = self.container.metadata.register_asset(asset)
+        return SessionAttachmentUploadResponse(session_id=session_id, asset=registered)
+
     def upload_session_video(
         self,
         *,
@@ -132,26 +165,70 @@ class ResearchPlatformService:
         file_name: str,
         content: bytes,
         mime_type: str = "video/mp4",
-    ) -> VideoUploadResponse:
-        session = self.container.metadata.get_session(session_id)
-        if session is None:
-            raise KeyError(f"Unknown session_id: {session_id}")
-        asset = self.container.artifact_store.put_bytes(
+    ) -> SessionAttachmentUploadResponse:
+        if self._resolve_session_attachment_kind(file_name=file_name, mime_type=mime_type) != AssetKind.VIDEO:
+            raise ValueError("Video upload endpoint only accepts video files.")
+        return self.upload_session_attachment(
             session_id=session_id,
-            name=file_name,
+            file_name=file_name,
             content=content,
-            kind="video",
             mime_type=mime_type,
-            metadata={
-                "placeholder_flags": {"dummy": True, "fake": False, "placeholder": True},
-                "runtime_validation": True,
-            },
         )
-        registered = self.container.metadata.register_asset(asset)
-        return VideoUploadResponse(session_id=session_id, asset=registered)
+
+    def list_session_attachments(self, session_id: str, kind: str | None = None) -> list[AssetRecord]:
+        return self.container.metadata.list_session_assets(session_id=session_id, kind=kind)
 
     def list_session_videos(self, session_id: str) -> list[AssetRecord]:
-        return self.container.metadata.list_session_assets(session_id=session_id, kind="video")
+        return self.list_session_attachments(session_id=session_id, kind="video")
+
+    def create_job(
+        self,
+        *,
+        job_type: JobType,
+        payload: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+        session_id: str | None = None,
+        run_id: str | None = None,
+    ) -> JobRecord:
+        job = JobRecord(
+            job_type=job_type,
+            session_id=session_id,
+            run_id=run_id,
+            payload=payload,
+            metadata=metadata or {},
+        )
+        return self.container.metadata.create_job(job)
+
+    def get_job(self, job_id: str) -> JobRecord:
+        job = self.container.metadata.get_job(job_id)
+        if job is None:
+            raise KeyError(f"Unknown job_id: {job_id}")
+        return job
+
+    def list_jobs(
+        self,
+        *,
+        session_id: str | None = None,
+        run_id: str | None = None,
+        job_type: JobType | None = None,
+    ) -> list[JobRecord]:
+        return self.container.metadata.list_jobs(
+            session_id=session_id,
+            run_id=run_id,
+            job_type=job_type.value if job_type else None,
+        )
+
+    def start_job(self, job_id: str, *, run_id: str | None = None) -> JobRecord:
+        job = self.get_job(job_id)
+        return self._update_job_state(job, status=JobStatus.RUNNING, run_id=run_id)
+
+    def complete_job(self, job_id: str, *, result: dict[str, Any], run_id: str | None = None) -> JobRecord:
+        job = self.get_job(job_id)
+        return self._update_job_state(job, status=JobStatus.COMPLETED, result=result, run_id=run_id)
+
+    def fail_job(self, job_id: str, *, error: dict[str, Any], run_id: str | None = None) -> JobRecord:
+        job = self.get_job(job_id)
+        return self._update_job_state(job, status=JobStatus.FAILED, error=error, run_id=run_id)
 
     def enqueue_run(self, run_id: str) -> RunRecord:
         run = self._require_run(run_id)
@@ -159,21 +236,80 @@ class ResearchPlatformService:
         run.updated_at = utc_now()
         self.container.metadata.update_run(run)
         self.container.metadata.append_run_event(RunEvent(run_id=run_id, status=RunStatus.QUEUED, message="Run queued."))
-        self.container.queue.enqueue(Job(run_id=run.run_id, session_id=run.session_id, payload={"manifest_id": run.manifest.id}))
+        job = self.create_job(
+            job_type=JobType.RUN_EXECUTION,
+            session_id=run.session_id,
+            run_id=run.run_id,
+            payload={"manifest_id": run.manifest.id, "run_id": run.run_id},
+            metadata={"run_kind": run.run_kind.value},
+        )
+        self.container.run_queue.enqueue(
+            Job(
+                job_id=job.job_id,
+                job_type=job.job_type.value,
+                run_id=run.run_id,
+                session_id=run.session_id,
+                payload=job.payload,
+                metadata=job.metadata,
+            )
+        )
         return run
 
+    def submit_agent_job(
+        self,
+        *,
+        session_id: str,
+        goal: str,
+        user_id: str | None = None,
+        trace_id: str | None = None,
+        config: dict[str, Any] | None = None,
+    ) -> JobRecord:
+        session = self.container.metadata.get_session(session_id)
+        if session is None:
+            raise KeyError(f"Unknown session_id: {session_id}")
+        job = self.create_job(
+            job_type=JobType.AGENT_EXECUTION,
+            session_id=session_id,
+            payload={
+                "session_id": session_id,
+                "goal": goal,
+                "config": config or {},
+            },
+            metadata={
+                "user_id": user_id,
+                "trace_id": trace_id or str(uuid4()),
+                "submitted_at": utc_now().isoformat(),
+            },
+        )
+        self.container.agent_queue.enqueue(
+            Job(
+                job_id=job.job_id,
+                job_type=job.job_type.value,
+                run_id="",
+                session_id=session_id,
+                payload=job.payload,
+                metadata=job.metadata,
+            )
+        )
+        return job
+
     def process_next_job(self) -> RunRecord | None:
-        job = self.container.queue.dequeue()
+        job = self.container.run_queue.dequeue()
         if job is not None:
             run = self._require_run(job.run_id)
+            run_job = self.get_job(job.job_id)
         else:
             run = self._find_next_queued_run()
             if run is None:
                 return None
+            queued_jobs = self.list_jobs(run_id=run.run_id, job_type=JobType.RUN_EXECUTION)
+            run_job = queued_jobs[0] if queued_jobs else None
         run.status = RunStatus.RUNNING
         run.updated_at = utc_now()
         self.container.metadata.update_run(run)
         self.container.metadata.append_run_event(RunEvent(run_id=run.run_id, status=RunStatus.RUNNING, message="Run started."))
+        if run_job is not None:
+            self._update_job_state(run_job, status=JobStatus.RUNNING)
         try:
             summary, assets, metric_results = self.container.executor.execute(run)
             run.status = RunStatus.COMPLETED
@@ -189,6 +325,12 @@ class ResearchPlatformService:
             self.container.metadata.append_run_event(
                 RunEvent(run_id=run.run_id, status=RunStatus.COMPLETED, message="Run completed.", payload=summary)
             )
+            if run_job is not None:
+                self._update_job_state(
+                    run_job,
+                    status=JobStatus.COMPLETED,
+                    result={"run_id": run.run_id, "status": run.status.value, "summary": run.summary},
+                )
         except Exception as exc:
             run.status = RunStatus.FAILED
             run.error = {"type": type(exc).__name__, "message": str(exc)}
@@ -197,6 +339,8 @@ class ResearchPlatformService:
             self.container.metadata.append_run_event(
                 RunEvent(run_id=run.run_id, status=RunStatus.FAILED, message="Run failed.", payload=run.error)
             )
+            if run_job is not None:
+                self._update_job_state(run_job, status=JobStatus.FAILED, error=run.error)
         return self._require_run(run.run_id)
 
     def get_run(self, run_id: str) -> RunRecord:
@@ -359,6 +503,33 @@ class ResearchPlatformService:
         self.delete_session(session_id)
         return ToolResponse(ok=True, resource_id=session_id, status="deleted", data={"session_id": session_id})
 
+    @staticmethod
+    def _resolve_session_attachment_kind(*, file_name: str, mime_type: str) -> AssetKind:
+        normalized_mime = mime_type.lower()
+        suffix = Path(file_name).suffix.lower()
+        if normalized_mime.startswith("video/") or suffix in {".mp4", ".mov", ".avi", ".webm", ".m4v", ".mkv"}:
+            return AssetKind.VIDEO
+        if normalized_mime.startswith("image/") or suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}:
+            return AssetKind.IMAGE
+        if normalized_mime.startswith("text/") or mime_type in {"application/json", "text/csv"} or suffix in {
+            ".txt",
+            ".md",
+            ".csv",
+            ".json",
+            ".yaml",
+            ".yml",
+            ".log",
+            ".xml",
+        }:
+            return AssetKind.TEXT
+        raise ValueError(f"Unsupported attachment type: {mime_type or suffix or 'unknown'}")
+
+    @staticmethod
+    def _build_session_attachment_name(file_name: str) -> str:
+        original = Path(file_name).name or "attachment"
+        sanitized = "".join(char if char.isalnum() or char in {"-", "_", "."} else "-" for char in original)
+        return f"{uuid4()}-{sanitized.lstrip('-') or 'attachment'}"
+
     def tool_create_run(
         self,
         session_id: str,
@@ -501,6 +672,26 @@ class ResearchPlatformService:
             raise KeyError(f"Unknown run_id: {run_id}")
         return run
 
+    def _update_job_state(
+        self,
+        job: JobRecord,
+        *,
+        status: JobStatus,
+        result: dict[str, Any] | None = None,
+        error: dict[str, Any] | None = None,
+        run_id: str | None = None,
+    ) -> JobRecord:
+        job.status = status
+        job.updated_at = utc_now()
+        if run_id is not None:
+            job.run_id = run_id
+        if result is not None:
+            job.result = result
+            job.error = None
+        if error is not None:
+            job.error = error
+        return self.container.metadata.update_job(job)
+
     @staticmethod
     def _merge_display_preferences(message: str, explicit: list[DisplayPreference]) -> list[DisplayPreference]:
         preferences = list(explicit)
@@ -594,12 +785,14 @@ class ResearchPlatformService:
     def _build_console_graph(self, planner: Any) -> Any:
         from hound_forward.agent_system.graphs.research_graph import ResearchGraph
         from hound_forward.agent_system.tools.registry import ToolRegistry
-        from hound_forward.worker.runtime import PlaceholderLocalWorkerBridge
+        from hound_forward.worker.runtime import InlineRunMonitor, PollingRunMonitor
+
+        run_monitor = InlineRunMonitor(service=self) if PlatformSettings().placeholder_worker_mode else PollingRunMonitor(service=self)
 
         return ResearchGraph(
             planner=planner,
             tools=ToolRegistry(self),
-            worker_bridge=PlaceholderLocalWorkerBridge(service=self),
+            run_monitor=run_monitor,
         )
 
     def _build_console_planner(self) -> Any:

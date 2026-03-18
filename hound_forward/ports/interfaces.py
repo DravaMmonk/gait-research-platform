@@ -10,6 +10,7 @@ from hound_forward.domain import (
     FormulaEvaluationRecord,
     FormulaProposalRecord,
     FormulaReviewRecord,
+    JobRecord,
     MetricDefinition,
     MetricResult,
     RunEvent,
@@ -21,9 +22,12 @@ from hound_forward.domain import (
 
 @dataclass
 class Job:
+    job_id: str
+    job_type: str
     run_id: str
-    session_id: str
+    session_id: str | None
     payload: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class MetadataRepository(ABC):
@@ -50,6 +54,24 @@ class MetadataRepository(ABC):
 
     @abstractmethod
     def list_runs(self, session_id: str | None = None) -> list[RunRecord]: ...
+
+    @abstractmethod
+    def create_job(self, job: JobRecord) -> JobRecord: ...
+
+    @abstractmethod
+    def update_job(self, job: JobRecord) -> JobRecord: ...
+
+    @abstractmethod
+    def get_job(self, job_id: str) -> JobRecord | None: ...
+
+    @abstractmethod
+    def list_jobs(
+        self,
+        *,
+        session_id: str | None = None,
+        run_id: str | None = None,
+        job_type: str | None = None,
+    ) -> list[JobRecord]: ...
 
     @abstractmethod
     def get_asset(self, asset_id: str) -> AssetRecord | None: ...

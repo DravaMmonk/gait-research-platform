@@ -5,26 +5,20 @@ from functools import lru_cache
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from hound_forward.adapters.metadata.azure_postgres import AzurePostgresMetadataRepository
-from hound_forward.adapters.queue.in_memory import InMemoryJobQueue
-from hound_forward.adapters.storage.local import LocalArtifactStore
-from hound_forward.agent_tools import AgentToolExecutor
 from hound_forward.agent_system.chat import ChatOrchestrator
-from hound_forward.agent_system.graphs.research_graph import ResearchGraph
 from hound_forward.agent_system.planners import build_planner
-from hound_forward.agent_system.tools.registry import ToolRegistry
-from hound_forward.application import ResearchPlatformService, ServiceContainer
+from hound_forward.bootstrap import build_service as build_platform_service
 from hound_forward.domain import (
     ChatRequest,
     ConsoleAgentRequest,
     ExecutionPlan,
     ExperimentManifest,
     FormulaStatus,
+    JobType,
     ReviewEvidenceBundle,
     ReviewVerdict,
     RunKind,
 )
-from hound_forward.pipeline import PlatformRunExecutor
 from hound_forward.settings import PlatformSettings
 
 
@@ -44,6 +38,14 @@ class RunCreateRequest(BaseModel):
 class AgentPlanRequest(BaseModel):
     session_id: str
     goal: str
+
+
+class AgentJobCreateRequest(BaseModel):
+    session_id: str
+    goal: str
+    user_id: str | None = None
+    trace_id: str | None = None
+    config: dict = Field(default_factory=dict)
 
 
 class FormulaDefinitionCreateRequest(BaseModel):
@@ -79,29 +81,8 @@ class FormulaReviewCreateRequest(BaseModel):
 
 
 @lru_cache(maxsize=1)
-def build_service() -> ResearchPlatformService:
-    settings = PlatformSettings()
-    metadata = AzurePostgresMetadataRepository(settings.metadata_database_url)
-    metadata.create_all()
-    artifact_store = LocalArtifactStore(settings.artifact_root_path())
-    queue = InMemoryJobQueue()
-    tool_runner = AgentToolExecutor(artifact_store=artifact_store, work_root=settings.artifact_root_path() / "tool_runs")
-    executor = PlatformRunExecutor(metadata=metadata, tool_runner=tool_runner)
-    return ResearchPlatformService(
-        ServiceContainer(metadata=metadata, artifact_store=artifact_store, queue=queue, executor=executor, tool_runner=tool_runner)
-    )
-
-
-@lru_cache(maxsize=1)
-def build_graph() -> ResearchGraph:
-    service = build_service()
-    settings = PlatformSettings()
-    planner = build_planner(
-        settings=settings,
-        available_tools=service.container.tool_runner.describe_tools() if service.container.tool_runner else [],
-    )
-    tools = ToolRegistry(service)
-    return ResearchGraph(planner=planner, tools=tools)
+def build_service():
+    return build_platform_service()
 
 
 @lru_cache(maxsize=1)
@@ -112,7 +93,6 @@ def build_chat_orchestrator() -> ChatOrchestrator:
 def create_app() -> FastAPI:
     app = FastAPI(title=PlatformSettings().api_title)
     service = build_service()
-    graph = build_graph()
     chat_orchestrator = build_chat_orchestrator()
 
     @app.get("/health")
@@ -146,7 +126,7 @@ def create_app() -> FastAPI:
     @app.post("/sessions/{session_id}/videos")
     async def upload_video(session_id: str, file: UploadFile = File(...)) -> dict:
         try:
-            uploaded = service.upload_session_video(
+            uploaded = service.upload_session_attachment(
                 session_id=session_id,
                 file_name=file.filename or "uploaded-video.mp4",
                 content=await file.read(),
@@ -154,7 +134,31 @@ def create_app() -> FastAPI:
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return uploaded.model_dump(mode="json")
+
+    @app.post("/sessions/{session_id}/attachments")
+    async def upload_attachment(session_id: str, file: UploadFile = File(...)) -> dict:
+        try:
+            uploaded = service.upload_session_attachment(
+                session_id=session_id,
+                file_name=file.filename or "uploaded-attachment",
+                content=await file.read(),
+                mime_type=file.content_type or "application/octet-stream",
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return uploaded.model_dump(mode="json")
+
+    @app.get("/sessions/{session_id}/attachments")
+    def list_session_attachments(session_id: str, kind: str | None = None) -> dict:
+        return {
+            "session_id": session_id,
+            "attachments": [item.model_dump(mode="json") for item in service.list_session_attachments(session_id, kind=kind)],
+        }
 
     @app.get("/sessions/{session_id}/videos")
     def list_session_videos(session_id: str) -> dict:
@@ -193,6 +197,23 @@ def create_app() -> FastAPI:
     @app.get("/runs")
     def list_runs(session_id: str | None = None) -> dict:
         return {"runs": [item.model_dump(mode="json") for item in service.list_runs(session_id=session_id)]}
+
+    @app.get("/jobs")
+    def list_jobs(session_id: str | None = None, run_id: str | None = None, job_type: str | None = None) -> dict:
+        resolved_type = JobType(job_type) if job_type else None
+        return {
+            "jobs": [
+                item.model_dump(mode="json")
+                for item in service.list_jobs(session_id=session_id, run_id=run_id, job_type=resolved_type)
+            ]
+        }
+
+    @app.get("/jobs/{job_id}")
+    def get_job(job_id: str) -> dict:
+        try:
+            return service.get_job(job_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/runs/{run_id}/assets")
     def list_assets(run_id: str) -> dict:
@@ -299,8 +320,18 @@ def create_app() -> FastAPI:
         return {"manifest": manifest.model_dump(mode="json"), "execution_plan": execution_plan.model_dump(mode="json")}
 
     @app.post("/agent/execute-plan")
-    def agent_execute_plan(request: AgentPlanRequest) -> dict:
-        return graph.invoke(goal=request.goal, session_id=request.session_id)
+    def agent_execute_plan(request: AgentJobCreateRequest) -> dict:
+        try:
+            job = service.submit_agent_job(
+                session_id=request.session_id,
+                goal=request.goal,
+                user_id=request.user_id,
+                trace_id=request.trace_id,
+                config=request.config,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return job.model_dump(mode="json")
 
     @app.post("/api/chat")
     def api_chat(request: ChatRequest) -> dict:

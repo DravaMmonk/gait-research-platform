@@ -36,6 +36,24 @@ CREATE TABLE IF NOT EXISTS run_events (
 
 CREATE INDEX IF NOT EXISTS idx_run_events_run_created ON run_events (run_id, created_at ASC);
 
+CREATE TABLE IF NOT EXISTS jobs (
+    job_id UUID PRIMARY KEY,
+    job_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    session_id UUID NULL REFERENCES sessions(session_id),
+    run_id UUID NULL REFERENCES runs(run_id),
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    result JSONB NULL,
+    error JSONB NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_status_type ON jobs (status, job_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_session_created ON jobs (session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_run_created ON jobs (run_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS assets (
     asset_id UUID PRIMARY KEY,
     run_id UUID NULL REFERENCES runs(run_id),

@@ -13,13 +13,16 @@ class MetadataSettings(BaseModel):
 class ArtifactStorageSettings(BaseModel):
     root: Path
     azure_blob_account_url: str | None
+    azure_blob_connection_string: str | None
     azure_blob_container: str
 
 
 class QueueSettings(BaseModel):
     backend: str
     azure_service_bus_namespace: str | None
-    azure_service_bus_queue: str
+    run_queue: str
+    agent_queue: str
+    poll_interval_seconds: float
 
 
 class WorkerRuntimeSettings(BaseModel):
@@ -27,6 +30,7 @@ class WorkerRuntimeSettings(BaseModel):
     placeholder_worker_mode: bool
     research_tool_execution_mode: str
     formula_evaluation_mode: str
+    poll_interval_seconds: float
 
 
 class AgentRuntimeSettings(BaseModel):
@@ -46,11 +50,15 @@ class PlatformSettings(BaseSettings):
     metadata_database_url: str = "sqlite+pysqlite:///./.hf/local.db"
     artifact_root: Path = Field(default=Path(".hf/artifacts"))
     azure_blob_account_url: str | None = None
+    azure_blob_connection_string: str | None = None
     azure_blob_container: str = "hound-platform"
 
     queue_backend: str = "in_memory"
     azure_service_bus_namespace: str | None = None
     azure_service_bus_queue: str = "runs"
+    azure_service_bus_run_queue: str | None = None
+    azure_service_bus_agent_queue: str = "agent-runs"
+    queue_poll_interval_seconds: float = 1.0
 
     default_runner: str = "local"
     placeholder_worker_mode: bool = True
@@ -74,6 +82,7 @@ class PlatformSettings(BaseSettings):
         return ArtifactStorageSettings(
             root=self.artifact_root_path(),
             azure_blob_account_url=self.azure_blob_account_url,
+            azure_blob_connection_string=self.azure_blob_connection_string,
             azure_blob_container=self.azure_blob_container,
         )
 
@@ -82,7 +91,9 @@ class PlatformSettings(BaseSettings):
         return QueueSettings(
             backend=self.queue_backend,
             azure_service_bus_namespace=self.azure_service_bus_namespace,
-            azure_service_bus_queue=self.azure_service_bus_queue,
+            run_queue=self.azure_service_bus_run_queue or self.azure_service_bus_queue,
+            agent_queue=self.azure_service_bus_agent_queue,
+            poll_interval_seconds=self.queue_poll_interval_seconds,
         )
 
     @property
@@ -92,6 +103,7 @@ class PlatformSettings(BaseSettings):
             placeholder_worker_mode=self.placeholder_worker_mode,
             research_tool_execution_mode=self.research_tool_execution_mode,
             formula_evaluation_mode=self.formula_evaluation_mode,
+            poll_interval_seconds=self.queue_poll_interval_seconds,
         )
 
     @property

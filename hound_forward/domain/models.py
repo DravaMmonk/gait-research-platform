@@ -21,6 +21,18 @@ class RunStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class JobStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class JobType(StrEnum):
+    RUN_EXECUTION = "run_execution"
+    AGENT_EXECUTION = "agent_execution"
+
+
 class RunKind(StrEnum):
     PIPELINE = "pipeline"
     METRIC_EVALUATION = "metric_evaluation"
@@ -33,6 +45,8 @@ class RunKind(StrEnum):
 
 class AssetKind(StrEnum):
     VIDEO = "video"
+    IMAGE = "image"
+    TEXT = "text"
     KEYPOINTS = "keypoints"
     SIGNAL = "signal"
     METRIC_RESULT = "metric_result"
@@ -189,6 +203,20 @@ class RunEvent(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class JobRecord(BaseModel):
+    job_id: str = Field(default_factory=lambda: str(uuid4()))
+    job_type: JobType
+    status: JobStatus = JobStatus.PENDING
+    session_id: str | None = None
+    run_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    result: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
 class AssetRecord(BaseModel):
     asset_id: str = Field(default_factory=lambda: str(uuid4()))
     run_id: str | None = None
@@ -201,7 +229,7 @@ class AssetRecord(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
-class VideoUploadResponse(BaseModel):
+class SessionAttachmentUploadResponse(BaseModel):
     session_id: str
     asset: AssetRecord
     placeholder_flags: dict[str, bool] = Field(

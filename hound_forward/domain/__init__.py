@@ -36,6 +36,9 @@ from .models import (
     FormulaReviewRecord,
     FormulaStatus,
     HighlightItem,
+    JobRecord,
+    JobStatus,
+    JobType,
     MetricDefinition,
     MetricTableColumn,
     MetricTableModule,
@@ -65,7 +68,7 @@ from .models import (
     VideoPanelModule,
     VideoPanelPayload,
     VisualModule,
-    VideoUploadResponse,
+    SessionAttachmentUploadResponse,
 )
 
 __all__ = [
@@ -106,6 +109,9 @@ __all__ = [
     "FormulaReviewRecord",
     "FormulaStatus",
     "HighlightItem",
+    "JobRecord",
+    "JobStatus",
+    "JobType",
     "MetricDefinition",
     "MetricTableColumn",
     "MetricTableModule",
@@ -135,5 +141,5 @@ __all__ = [
     "VideoPanelModule",
     "VideoPanelPayload",
     "VisualModule",
-    "VideoUploadResponse",
+    "SessionAttachmentUploadResponse",
 ]

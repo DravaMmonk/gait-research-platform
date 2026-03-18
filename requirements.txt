@@ -1,3 +1,6 @@
+azure-identity>=1.25
+azure-servicebus>=7.14
+azure-storage-blob>=12.27
 fastapi>=0.135
 langgraph>=1.0
 matplotlib>=3.8

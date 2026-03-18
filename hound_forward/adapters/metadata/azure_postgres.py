@@ -18,6 +18,9 @@ from hound_forward.domain import (
     FormulaProposalRecord,
     FormulaReviewRecord,
     FormulaStatus,
+    JobRecord,
+    JobStatus,
+    JobType,
     MetricDefinition,
     MetricResult,
     ReviewEvidenceBundle,
@@ -72,6 +75,22 @@ class RunEventModel(Base):
     message: Mapped[str] = mapped_column(String)
     payload_json: Mapped[dict[str, Any]] = mapped_column("payload", JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class JobModel(Base):
+    __tablename__ = "jobs"
+
+    job_id: Mapped[str] = mapped_column(String, primary_key=True)
+    job_type: Mapped[str] = mapped_column(String, index=True)
+    status: Mapped[str] = mapped_column(String, index=True)
+    session_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    run_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    payload_json: Mapped[dict[str, Any]] = mapped_column("payload", JSON, default=dict)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+    result_json: Mapped[dict[str, Any] | None] = mapped_column("result", JSON, nullable=True)
+    error_json: Mapped[dict[str, Any] | None] = mapped_column("error", JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class AssetModel(Base):
@@ -300,6 +319,64 @@ class AzurePostgresMetadataRepository:
             if session_id is not None:
                 stmt = stmt.where(RunModel.session_id == session_id)
             return [self._to_run_record(model) for model in db.scalars(stmt)]
+
+    def create_job(self, job: JobRecord) -> JobRecord:
+        with self._session_factory.begin() as db:
+            db.add(
+                JobModel(
+                    job_id=job.job_id,
+                    job_type=job.job_type.value,
+                    status=job.status.value,
+                    session_id=job.session_id,
+                    run_id=job.run_id,
+                    payload_json=job.payload,
+                    metadata_json=job.metadata,
+                    result_json=job.result,
+                    error_json=job.error,
+                    created_at=job.created_at,
+                    updated_at=job.updated_at,
+                )
+            )
+        return job
+
+    def update_job(self, job: JobRecord) -> JobRecord:
+        with self._session_factory.begin() as db:
+            model = db.get(JobModel, job.job_id)
+            if model is None:
+                raise KeyError(f"Unknown job_id: {job.job_id}")
+            model.status = job.status.value
+            model.session_id = job.session_id
+            model.run_id = job.run_id
+            model.payload_json = job.payload
+            model.metadata_json = job.metadata
+            model.result_json = job.result
+            model.error_json = job.error
+            model.updated_at = job.updated_at
+        return job
+
+    def get_job(self, job_id: str) -> JobRecord | None:
+        with self._session_factory() as db:
+            model = db.get(JobModel, job_id)
+            if model is None:
+                return None
+            return self._to_job_record(model)
+
+    def list_jobs(
+        self,
+        *,
+        session_id: str | None = None,
+        run_id: str | None = None,
+        job_type: str | None = None,
+    ) -> list[JobRecord]:
+        with self._session_factory() as db:
+            stmt = select(JobModel).order_by(JobModel.created_at.desc())
+            if session_id is not None:
+                stmt = stmt.where(JobModel.session_id == session_id)
+            if run_id is not None:
+                stmt = stmt.where(JobModel.run_id == run_id)
+            if job_type is not None:
+                stmt = stmt.where(JobModel.job_type == job_type)
+            return [self._to_job_record(model) for model in db.scalars(stmt)]
 
     def append_run_event(self, event: RunEvent) -> RunEvent:
         with self._session_factory.begin() as db:
@@ -564,6 +641,12 @@ class AzurePostgresMetadataRepository:
             return
         inspector = inspect(self.engine)
         with self.engine.begin() as connection:
+            if "jobs" in inspector.get_table_names():
+                job_columns = {column["name"] for column in inspector.get_columns("jobs")}
+                if "session_id" not in job_columns:
+                    connection.execute(text("ALTER TABLE jobs ADD COLUMN session_id VARCHAR"))
+                if "run_id" not in job_columns:
+                    connection.execute(text("ALTER TABLE jobs ADD COLUMN run_id VARCHAR"))
             if "runs" in inspector.get_table_names():
                 run_columns = {column["name"] for column in inspector.get_columns("runs")}
                 if "input_asset_ids" not in run_columns:
@@ -605,6 +688,22 @@ class AzurePostgresMetadataRepository:
             execution_plan=ExecutionPlan.model_validate(model.execution_plan_json) if model.execution_plan_json else None,
             stage_results=[StageResult.model_validate(item) for item in model.stage_results_json],
             summary=model.summary_json,
+            error=model.error_json,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+    @staticmethod
+    def _to_job_record(model: JobModel) -> JobRecord:
+        return JobRecord(
+            job_id=model.job_id,
+            job_type=JobType(model.job_type),
+            status=JobStatus(model.status),
+            session_id=model.session_id,
+            run_id=model.run_id,
+            payload=model.payload_json,
+            metadata=model.metadata_json,
+            result=model.result_json,
             error=model.error_json,
             created_at=model.created_at,
             updated_at=model.updated_at,
