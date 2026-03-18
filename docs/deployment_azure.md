@@ -40,7 +40,7 @@ The parameter file is not just an example. It is the environment contract for a 
 - one Container Apps environment
 - one API Container App
 - one agent Container App
-- one worker Container App Job
+- one schedule-triggered worker Container App Job
 - system-assigned managed identities for API, agent, and worker
 - Blob Data Contributor RBAC assignments for those managed identities
 
@@ -61,7 +61,8 @@ The top-level deployment exports a stable `infraContract` object:
   },
   "service_bus": {
     "namespace": "...",
-    "queue": "runs"
+    "run_queue": "runs",
+    "agent_queue": "agent-runs"
   }
 }
 ```
@@ -79,6 +80,8 @@ The Bicep template now injects or derives the core runtime settings expected by 
 - `HF_AZURE_SERVICE_BUS_QUEUE`
 - `HF_AZURE_SERVICE_BUS_RUN_QUEUE`
 - `HF_AZURE_SERVICE_BUS_AGENT_QUEUE`
+- `HF_QUEUE_BACKEND`
+- `HF_PLACEHOLDER_WORKER_MODE`
 
 For local development and emulator usage, the runtime also supports:
 
@@ -150,6 +153,7 @@ Use `az deployment group create` against `infra/azure/main.bicep` with the requi
 - Service Bus run queue name
 - Service Bus agent queue name
 - Container Apps environment name
+- worker schedule cron
 - API, agent, and worker image references
 
 ### 2. Initialize schema
@@ -169,6 +173,8 @@ The intended mapping is:
 - API Container App -> `Dockerfile.api`
 - Agent Container App -> `Dockerfile.agent`
 - Worker Container Apps Job -> `Dockerfile.worker`
+
+The worker image should process a bounded batch of queue messages and exit. The Azure Job restarts it on the configured cron schedule.
 
 ### 4. Deploy code
 

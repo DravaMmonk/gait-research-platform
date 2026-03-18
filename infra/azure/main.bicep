@@ -44,6 +44,9 @@ param agentAppName string = 'hound-agent'
 @description('Worker job name.')
 param workerJobName string = 'hound-worker'
 
+@description('Cron schedule used by the worker job.')
+param workerScheduleCron string = '*/1 * * * *'
+
 @description('API container image.')
 param apiImage string = 'ghcr.io/example/hound-api:latest'
 
@@ -92,6 +95,7 @@ module apps './modules/containerapps.bicep' = {
     apiAppName: apiAppName
     agentAppName: agentAppName
     workerJobName: workerJobName
+    workerScheduleCron: workerScheduleCron
     apiImage: apiImage
     agentImage: agentImage
     workerImage: workerImage

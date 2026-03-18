@@ -38,6 +38,9 @@
     "containerAppsEnvironmentName": {
       "value": "hounddev-env"
     },
+    "workerScheduleCron": {
+      "value": "*/1 * * * *"
+    },
     "apiImage": {
       "value": "ghcr.io/xxx/api:latest"
     },

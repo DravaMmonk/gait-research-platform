@@ -31,6 +31,8 @@ Create a local `infra/azure/parameters.dev.json` from that file and fill in secr
 - `service_bus.run_queue`
 - `service_bus.agent_queue`
 
+The worker runtime is expected to run as a scheduled Azure Container Apps Job. Each invocation drains a bounded batch of queue messages and exits.
+
 That contract is intentionally shaped to become application env vars without the app needing Azure-specific deployment context.
 
 ## Outputs To Env

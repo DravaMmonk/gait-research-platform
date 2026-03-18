@@ -31,6 +31,8 @@ class WorkerRuntimeSettings(BaseModel):
     research_tool_execution_mode: str
     formula_evaluation_mode: str
     poll_interval_seconds: float
+    max_idle_polls: int
+    max_runs_per_invocation: int
 
 
 class AgentRuntimeSettings(BaseModel):
@@ -64,6 +66,8 @@ class PlatformSettings(BaseSettings):
     placeholder_worker_mode: bool = True
     research_tool_execution_mode: str = "local_function"
     formula_evaluation_mode: str = "scaffold"
+    worker_max_idle_polls: int = 3
+    worker_max_runs_per_invocation: int = 20
     llm_model: str = "gpt-4o-mini"
     agent_recursion_limit: int = 12
     planner_mode: str = "hybrid"
@@ -104,6 +108,8 @@ class PlatformSettings(BaseSettings):
             research_tool_execution_mode=self.research_tool_execution_mode,
             formula_evaluation_mode=self.formula_evaluation_mode,
             poll_interval_seconds=self.queue_poll_interval_seconds,
+            max_idle_polls=self.worker_max_idle_polls,
+            max_runs_per_invocation=self.worker_max_runs_per_invocation,
         )
 
     @property

@@ -49,8 +49,22 @@ class QueueWorkerRuntime:
     def run_once(self) -> RunRecord | None:
         return self.service.process_next_job()
 
-    def run_forever(self, *, poll_interval_seconds: float = 1.0) -> None:
-        while True:
+    def run_until_idle(
+        self,
+        *,
+        poll_interval_seconds: float = 1.0,
+        max_idle_polls: int = 3,
+        max_runs: int = 20,
+    ) -> int:
+        processed_runs = 0
+        idle_polls = 0
+        while processed_runs < max_runs and idle_polls < max_idle_polls:
             processed = self.run_once()
-            if processed is None and poll_interval_seconds > 0:
-                time.sleep(poll_interval_seconds)
+            if processed is None:
+                idle_polls += 1
+                if poll_interval_seconds > 0 and idle_polls < max_idle_polls:
+                    time.sleep(poll_interval_seconds)
+                continue
+            processed_runs += 1
+            idle_polls = 0
+        return processed_runs

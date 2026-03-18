@@ -25,6 +25,7 @@ jobs:
       HF_SERVICE_BUS_RUN_QUEUE_NAME: ${{ vars.HF_SERVICE_BUS_RUN_QUEUE_NAME || 'runs' }}
       HF_SERVICE_BUS_AGENT_QUEUE_NAME: ${{ vars.HF_SERVICE_BUS_AGENT_QUEUE_NAME || 'agent-runs' }}
       HF_CONTAINERAPPS_ENVIRONMENT_NAME: ${{ secrets.HF_CONTAINERAPPS_ENVIRONMENT_NAME }}
+      HF_WORKER_SCHEDULE_CRON: ${{ vars.HF_WORKER_SCHEDULE_CRON || '*/1 * * * *' }}
       HF_API_IMAGE: ${{ vars.HF_API_IMAGE || 'ghcr.io/example/hound-api:latest' }}
       HF_AGENT_IMAGE: ${{ vars.HF_AGENT_IMAGE || 'ghcr.io/example/hound-agent:latest' }}
       HF_WORKER_IMAGE: ${{ vars.HF_WORKER_IMAGE || 'ghcr.io/example/hound-worker:latest' }}
@@ -56,6 +57,7 @@ jobs:
               serviceBusRunQueueName="$HF_SERVICE_BUS_RUN_QUEUE_NAME" \
               serviceBusAgentQueueName="$HF_SERVICE_BUS_AGENT_QUEUE_NAME" \
               containerAppsEnvironmentName="$HF_CONTAINERAPPS_ENVIRONMENT_NAME" \
+              workerScheduleCron="$HF_WORKER_SCHEDULE_CRON" \
               apiImage="$HF_API_IMAGE" \
               agentImage="$HF_AGENT_IMAGE" \
               workerImage="$HF_WORKER_IMAGE"

@@ -16,6 +16,9 @@ param agentAppName string
 @description('Worker job name.')
 param workerJobName string
 
+@description('Cron schedule used by the worker job.')
+param workerScheduleCron string = '*/1 * * * *'
+
 @description('API container image.')
 param apiImage string
 
@@ -116,6 +119,18 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
               secretRef: metadataDatabaseSecretName
             }
             {
+              name: 'HF_ENVIRONMENT'
+              value: 'azure'
+            }
+            {
+              name: 'HF_QUEUE_BACKEND'
+              value: 'azure_service_bus'
+            }
+            {
+              name: 'HF_PLACEHOLDER_WORKER_MODE'
+              value: 'false'
+            }
+            {
               name: 'HF_AZURE_BLOB_ACCOUNT_URL'
               value: blobAccountUrl
             }
@@ -173,6 +188,18 @@ resource agentApp 'Microsoft.App/containerApps@2024-03-01' = {
               secretRef: metadataDatabaseSecretName
             }
             {
+              name: 'HF_ENVIRONMENT'
+              value: 'azure'
+            }
+            {
+              name: 'HF_QUEUE_BACKEND'
+              value: 'azure_service_bus'
+            }
+            {
+              name: 'HF_PLACEHOLDER_WORKER_MODE'
+              value: 'false'
+            }
+            {
               name: 'HF_AZURE_BLOB_ACCOUNT_URL'
               value: blobAccountUrl
             }
@@ -208,9 +235,14 @@ resource workerJob 'Microsoft.App/jobs@2024-03-01' = {
   properties: {
     environmentId: containerEnv.id
     configuration: {
-      triggerType: 'Manual'
+      triggerType: 'Schedule'
       replicaRetryLimit: 2
-      replicaTimeout: 3600
+      replicaTimeout: 900
+      scheduleTriggerConfig: {
+        cronExpression: workerScheduleCron
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
       secrets: [
         {
           name: metadataDatabaseSecretName
@@ -227,6 +259,18 @@ resource workerJob 'Microsoft.App/jobs@2024-03-01' = {
             {
               name: 'HF_METADATA_DATABASE_URL'
               secretRef: metadataDatabaseSecretName
+            }
+            {
+              name: 'HF_ENVIRONMENT'
+              value: 'azure'
+            }
+            {
+              name: 'HF_QUEUE_BACKEND'
+              value: 'azure_service_bus'
+            }
+            {
+              name: 'HF_PLACEHOLDER_WORKER_MODE'
+              value: 'false'
             }
             {
               name: 'HF_AZURE_BLOB_ACCOUNT_URL'
@@ -251,6 +295,14 @@ resource workerJob 'Microsoft.App/jobs@2024-03-01' = {
             {
               name: 'HF_AZURE_SERVICE_BUS_AGENT_QUEUE'
               value: serviceBusAgentQueueName
+            }
+            {
+              name: 'HF_WORKER_MAX_IDLE_POLLS'
+              value: '3'
+            }
+            {
+              name: 'HF_WORKER_MAX_RUNS_PER_INVOCATION'
+              value: '20'
             }
           ]
         }
