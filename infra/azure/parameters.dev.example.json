@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "australiaeast"
+    },
+    "environmentName": {
+      "value": "dev"
+    },
+    "storageAccountName": {
+      "value": "hounddevstorage"
+    },
+    "storageContainerName": {
+      "value": "assets"
+    },
+    "postgresServerName": {
+      "value": "hounddev-postgres"
+    },
+    "postgresDatabaseName": {
+      "value": "hound"
+    },
+    "postgresAdminLogin": {
+      "value": "hfadmin"
+    },
+    "postgresAdminPassword": {
+      "value": "REPLACE_ME"
+    },
+    "serviceBusNamespaceName": {
+      "value": "hounddev-sb"
+    },
+    "serviceBusRunQueueName": {
+      "value": "runs"
+    },
+    "serviceBusAgentQueueName": {
+      "value": "agent-runs"
+    },
+    "containerAppsEnvironmentName": {
+      "value": "hounddev-env"
+    },
+    "apiImage": {
+      "value": "ghcr.io/xxx/api:latest"
+    },
+    "agentImage": {
+      "value": "ghcr.io/xxx/agent:latest"
+    },
+    "workerImage": {
+      "value": "ghcr.io/xxx/worker:latest"
+    }
+  }
+}

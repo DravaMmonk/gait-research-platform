@@ -7,11 +7,30 @@ param environmentName string = 'dev'
 @description('Storage account name.')
 param storageAccountName string
 
+@description('Primary blob container used by the application.')
+param storageContainerName string = 'hound-platform'
+
 @description('Azure PostgreSQL server name.')
 param postgresServerName string
 
+@description('Application database name.')
+param postgresDatabaseName string = 'houndforward'
+
+@description('PostgreSQL administrator login.')
+param postgresAdminLogin string
+
+@description('PostgreSQL administrator password.')
+@secure()
+param postgresAdminPassword string
+
 @description('Azure Service Bus namespace name.')
 param serviceBusNamespaceName string
+
+@description('Run queue name.')
+param serviceBusRunQueueName string = 'runs'
+
+@description('Agent queue name.')
+param serviceBusAgentQueueName string = 'agent-runs'
 
 @description('Container Apps environment name.')
 param containerAppsEnvironmentName string
@@ -25,153 +44,92 @@ param agentAppName string = 'hound-agent'
 @description('Worker job name.')
 param workerJobName string = 'hound-worker'
 
-resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
-  name: storageAccountName
-  location: location
-  sku: {
-    name: 'Standard_LRS'
-  }
-  kind: 'StorageV2'
-}
+@description('API container image.')
+param apiImage string = 'ghcr.io/example/hound-api:latest'
 
-resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
-  name: '${storage.name}/default'
-}
+@description('Agent container image.')
+param agentImage string = 'ghcr.io/example/hound-agent:latest'
 
-resource blobContainers 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = [for name in [
-  'videos'
-  'keypoints'
-  'signals'
-  'metrics'
-  'reports'
-  'logs'
-]: {
-  name: '${storage.name}/default/${name}'
-  dependsOn: [blobService]
-}]
+@description('Worker container image.')
+param workerImage string = 'ghcr.io/example/hound-worker:latest'
 
-resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-preview' = {
-  name: postgresServerName
-  location: location
-  sku: {
-    name: 'Standard_B2s'
-    tier: 'Burstable'
-  }
-  properties: {
-    version: '16'
-    authConfig: {
-      activeDirectoryAuth: 'Enabled'
-      passwordAuth: 'Enabled'
-    }
-    backup: {
-      backupRetentionDays: 7
-      geoRedundantBackup: 'Disabled'
-    }
-    network: {
-      publicNetworkAccess: 'Enabled'
-    }
+module storage './modules/storage.bicep' = {
+  name: 'storage'
+  params: {
+    location: location
+    storageAccountName: storageAccountName
+    storageContainerName: storageContainerName
   }
 }
 
-resource serviceBus 'Microsoft.ServiceBus/namespaces@2024-01-01' = {
-  name: serviceBusNamespaceName
-  location: location
-  sku: {
-    name: 'Standard'
-    tier: 'Standard'
+module postgres './modules/postgres.bicep' = {
+  name: 'postgres'
+  params: {
+    location: location
+    postgresServerName: postgresServerName
+    postgresDatabaseName: postgresDatabaseName
+    postgresAdminLogin: postgresAdminLogin
+    postgresAdminPassword: postgresAdminPassword
   }
 }
 
-resource serviceBusQueue 'Microsoft.ServiceBus/namespaces/queues@2024-01-01' = {
-  name: '${serviceBus.name}/runs'
-  properties: {
-    deadLetteringOnMessageExpiration: true
-    maxDeliveryCount: 5
+module servicebus './modules/servicebus.bicep' = {
+  name: 'servicebus'
+  params: {
+    location: location
+    serviceBusNamespaceName: serviceBusNamespaceName
+    runQueueName: serviceBusRunQueueName
+    agentQueueName: serviceBusAgentQueueName
   }
 }
 
-resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
-  name: 'hound-${environmentName}-logs'
-  location: location
-  properties: {
-    retentionInDays: 30
+module apps './modules/containerapps.bicep' = {
+  name: 'containerapps'
+  params: {
+    location: location
+    environmentName: environmentName
+    containerAppsEnvironmentName: containerAppsEnvironmentName
+    apiAppName: apiAppName
+    agentAppName: agentAppName
+    workerJobName: workerJobName
+    apiImage: apiImage
+    agentImage: agentImage
+    workerImage: workerImage
+    blobAccountUrl: storage.outputs.blobEndpoint
+    blobContainerName: storage.outputs.containerName
+    serviceBusNamespaceName: servicebus.outputs.serviceBusNamespaceName
+    serviceBusRunQueueName: servicebus.outputs.runQueueName
+    serviceBusAgentQueueName: servicebus.outputs.agentQueueName
+    metadataDatabaseUrl: postgres.outputs.metadataDatabaseUrl
+    storageAccountResourceId: storage.outputs.storageAccountId
+    serviceBusNamespaceResourceId: servicebus.outputs.serviceBusNamespaceId
   }
 }
 
-resource containerEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
-  name: containerAppsEnvironmentName
-  location: location
-  properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logAnalytics.properties.customerId
-        sharedKey: logAnalytics.listKeys().primarySharedKey
-      }
-    }
+output infraContract object = {
+  blob: {
+    account_url: storage.outputs.blobEndpoint
+    container: storage.outputs.containerName
+  }
+  postgres: {
+    host: postgres.outputs.postgresFqdn
+    database: postgres.outputs.postgresDatabase
+    user: postgres.outputs.postgresAdminLogin
+    metadata_database_url_secret_name: apps.outputs.metadataDatabaseUrlSecretName
+  }
+  service_bus: {
+    namespace: servicebus.outputs.serviceBusNamespaceName
+    run_queue: servicebus.outputs.runQueueName
+    agent_queue: servicebus.outputs.agentQueueName
   }
 }
 
-resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
-  name: apiAppName
-  location: location
-  properties: {
-    managedEnvironmentId: containerEnv.id
-    configuration: {
-      ingress: {
-        external: true
-        targetPort: 8000
-      }
-    }
-    template: {
-      containers: [
-        {
-          name: 'api'
-          image: 'ghcr.io/example/hound-api:latest'
-        }
-      ]
-    }
-  }
-}
-
-resource agentApp 'Microsoft.App/containerApps@2024-03-01' = {
-  name: agentAppName
-  location: location
-  properties: {
-    managedEnvironmentId: containerEnv.id
-    template: {
-      containers: [
-        {
-          name: 'agent'
-          image: 'ghcr.io/example/hound-agent:latest'
-        }
-      ]
-    }
-  }
-}
-
-resource workerJob 'Microsoft.App/jobs@2024-03-01' = {
-  name: workerJobName
-  location: location
-  properties: {
-    environmentId: containerEnv.id
-    configuration: {
-      triggerType: 'Manual'
-      replicaRetryLimit: 2
-      replicaTimeout: 3600
-    }
-    template: {
-      containers: [
-        {
-          name: 'worker'
-          image: 'ghcr.io/example/hound-worker:latest'
-        }
-      ]
-    }
-  }
-}
-
-output storageAccountId string = storage.id
-output postgresServerId string = postgres.id
-output serviceBusNamespaceId string = serviceBus.id
-output containerAppsEnvironmentId string = containerEnv.id
+output storageAccountId string = storage.outputs.storageAccountId
+output storageBlobEndpoint string = storage.outputs.blobEndpoint
+output storageContainer string = storage.outputs.containerName
+output postgresServerId string = postgres.outputs.postgresServerId
+output postgresServerFqdn string = postgres.outputs.postgresFqdn
+output postgresDatabase string = postgres.outputs.postgresDatabase
+output metadataDatabaseUrlSecretName string = apps.outputs.metadataDatabaseUrlSecretName
+output serviceBusNamespaceId string = servicebus.outputs.serviceBusNamespaceId
+output containerAppsEnvironmentId string = apps.outputs.containerAppsEnvironmentId

@@ -1,0 +1,69 @@
+name: Deploy Azure
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-infra:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+      AZURE_LOCATION: ${{ secrets.AZURE_LOCATION }}
+      HF_ENVIRONMENT_NAME: ${{ vars.HF_ENVIRONMENT_NAME || 'dev' }}
+      HF_STORAGE_ACCOUNT_NAME: ${{ secrets.HF_STORAGE_ACCOUNT_NAME }}
+      HF_STORAGE_CONTAINER_NAME: ${{ vars.HF_STORAGE_CONTAINER_NAME || 'hound-platform' }}
+      HF_POSTGRES_SERVER_NAME: ${{ secrets.HF_POSTGRES_SERVER_NAME }}
+      HF_POSTGRES_DATABASE_NAME: ${{ vars.HF_POSTGRES_DATABASE_NAME || 'houndforward' }}
+      HF_POSTGRES_ADMIN_LOGIN: ${{ secrets.HF_POSTGRES_ADMIN_LOGIN }}
+      HF_POSTGRES_ADMIN_PASSWORD: ${{ secrets.HF_POSTGRES_ADMIN_PASSWORD }}
+      HF_SERVICE_BUS_NAMESPACE_NAME: ${{ secrets.HF_SERVICE_BUS_NAMESPACE_NAME }}
+      HF_SERVICE_BUS_RUN_QUEUE_NAME: ${{ vars.HF_SERVICE_BUS_RUN_QUEUE_NAME || 'runs' }}
+      HF_SERVICE_BUS_AGENT_QUEUE_NAME: ${{ vars.HF_SERVICE_BUS_AGENT_QUEUE_NAME || 'agent-runs' }}
+      HF_CONTAINERAPPS_ENVIRONMENT_NAME: ${{ secrets.HF_CONTAINERAPPS_ENVIRONMENT_NAME }}
+      HF_API_IMAGE: ${{ vars.HF_API_IMAGE || 'ghcr.io/example/hound-api:latest' }}
+      HF_AGENT_IMAGE: ${{ vars.HF_AGENT_IMAGE || 'ghcr.io/example/hound-agent:latest' }}
+      HF_WORKER_IMAGE: ${{ vars.HF_WORKER_IMAGE || 'ghcr.io/example/hound-worker:latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Bicep
+        run: |
+          az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/main.bicep \
+            --parameters \
+              location="$AZURE_LOCATION" \
+              environmentName="$HF_ENVIRONMENT_NAME" \
+              storageAccountName="$HF_STORAGE_ACCOUNT_NAME" \
+              storageContainerName="$HF_STORAGE_CONTAINER_NAME" \
+              postgresServerName="$HF_POSTGRES_SERVER_NAME" \
+              postgresDatabaseName="$HF_POSTGRES_DATABASE_NAME" \
+              postgresAdminLogin="$HF_POSTGRES_ADMIN_LOGIN" \
+              postgresAdminPassword="$HF_POSTGRES_ADMIN_PASSWORD" \
+              serviceBusNamespaceName="$HF_SERVICE_BUS_NAMESPACE_NAME" \
+              serviceBusRunQueueName="$HF_SERVICE_BUS_RUN_QUEUE_NAME" \
+              serviceBusAgentQueueName="$HF_SERVICE_BUS_AGENT_QUEUE_NAME" \
+              containerAppsEnvironmentName="$HF_CONTAINERAPPS_ENVIRONMENT_NAME" \
+              apiImage="$HF_API_IMAGE" \
+              agentImage="$HF_AGENT_IMAGE" \
+              workerImage="$HF_WORKER_IMAGE"
+
+      - name: Apply database schema
+        env:
+          PGPASSWORD: ${{ secrets.HF_POSTGRES_ADMIN_PASSWORD }}
+        run: |
+          psql \
+            "host=${HF_POSTGRES_SERVER_NAME}.postgres.database.azure.com port=5432 dbname=${HF_POSTGRES_DATABASE_NAME} user=${HF_POSTGRES_ADMIN_LOGIN} sslmode=require" \
+            -f db/schema.sql
