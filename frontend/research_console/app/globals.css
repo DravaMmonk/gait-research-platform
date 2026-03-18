@@ -201,16 +201,34 @@
 }
 
 .research-chat .copilotKitMessage.copilotKitAssistantMessage {
+  position: relative;
+  max-width: min(100%, 44rem);
+  margin-bottom: 2.9rem;
+  padding: 0.95rem 1.05rem;
+  padding-left: 1.05rem;
+  padding-right: 1.05rem;
   border: 1px solid hsl(var(--border) / 0.82);
   border-bottom-left-radius: 0.45rem;
   background: hsl(var(--card));
   color: hsl(var(--foreground));
 }
 
+.research-chat .copilotKitMessage.copilotKitAssistantMessage .copilotKitMarkdown {
+  display: block;
+  width: 100%;
+}
+
+.research-chat .copilotKitMessage.copilotKitAssistantMessage .copilotKitMarkdownElement {
+  overflow-wrap: anywhere;
+}
+
 .research-chat .copilotKitMessage.copilotKitAssistantMessage .copilotKitMessageControls {
-  position: static;
+  position: absolute;
+  left: 0;
+  bottom: -2.2rem;
+  display: flex;
   gap: 0.7rem;
-  padding-top: 0.7rem;
+  padding-top: 0;
   opacity: 1;
 }
 
