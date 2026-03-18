@@ -128,6 +128,7 @@ Frontend architecture notes live in:
 
 The target Azure deployment includes:
 
+- Azure Container Registry for runtime images
 - Azure PostgreSQL Flexible Server for metadata
 - Azure Blob Storage for videos, keypoints, signals, metrics, reports, and logs
 - Azure Service Bus for `agent-runs` and `runs`

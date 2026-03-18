@@ -15,6 +15,8 @@ jobs:
       AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
       AZURE_LOCATION: ${{ secrets.AZURE_LOCATION }}
       HF_ENVIRONMENT_NAME: ${{ vars.HF_ENVIRONMENT_NAME || 'dev' }}
+      HF_CONTAINER_REGISTRY_NAME: ${{ secrets.HF_CONTAINER_REGISTRY_NAME }}
+      HF_CONTAINER_REGISTRY_SKU: ${{ vars.HF_CONTAINER_REGISTRY_SKU || 'Basic' }}
       HF_STORAGE_ACCOUNT_NAME: ${{ secrets.HF_STORAGE_ACCOUNT_NAME }}
       HF_STORAGE_CONTAINER_NAME: ${{ vars.HF_STORAGE_CONTAINER_NAME || 'hound-platform' }}
       HF_POSTGRES_SERVER_NAME: ${{ secrets.HF_POSTGRES_SERVER_NAME }}
@@ -26,9 +28,6 @@ jobs:
       HF_SERVICE_BUS_AGENT_QUEUE_NAME: ${{ vars.HF_SERVICE_BUS_AGENT_QUEUE_NAME || 'agent-runs' }}
       HF_CONTAINERAPPS_ENVIRONMENT_NAME: ${{ secrets.HF_CONTAINERAPPS_ENVIRONMENT_NAME }}
       HF_WORKER_SCHEDULE_CRON: ${{ vars.HF_WORKER_SCHEDULE_CRON || '*/1 * * * *' }}
-      HF_API_IMAGE: ${{ vars.HF_API_IMAGE || 'ghcr.io/example/hound-api:latest' }}
-      HF_AGENT_IMAGE: ${{ vars.HF_AGENT_IMAGE || 'ghcr.io/example/hound-agent:latest' }}
-      HF_WORKER_IMAGE: ${{ vars.HF_WORKER_IMAGE || 'ghcr.io/example/hound-worker:latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,6 +38,57 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Ensure Azure Container Registry
+        run: |
+          az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/modules/acr.bicep \
+            --parameters \
+              location="$AZURE_LOCATION" \
+              registryName="$HF_CONTAINER_REGISTRY_NAME" \
+              sku="$HF_CONTAINER_REGISTRY_SKU"
+
+      - name: Enable ACR ARM token authentication
+        run: |
+          az acr config authentication-as-arm update \
+            --registry "$HF_CONTAINER_REGISTRY_NAME" \
+            --status enabled
+
+      - name: Resolve image tags
+        run: |
+          SHORT_SHA="${GITHUB_SHA::12}"
+          echo "HF_IMAGE_TAG=$SHORT_SHA" >> "$GITHUB_ENV"
+          echo "HF_API_REPOSITORY=hound-api" >> "$GITHUB_ENV"
+          echo "HF_AGENT_REPOSITORY=hound-agent" >> "$GITHUB_ENV"
+          echo "HF_WORKER_REPOSITORY=hound-worker" >> "$GITHUB_ENV"
+          echo "HF_API_IMAGE=${HF_CONTAINER_REGISTRY_NAME}.azurecr.io/hound-api:$SHORT_SHA" >> "$GITHUB_ENV"
+          echo "HF_AGENT_IMAGE=${HF_CONTAINER_REGISTRY_NAME}.azurecr.io/hound-agent:$SHORT_SHA" >> "$GITHUB_ENV"
+          echo "HF_WORKER_IMAGE=${HF_CONTAINER_REGISTRY_NAME}.azurecr.io/hound-worker:$SHORT_SHA" >> "$GITHUB_ENV"
+
+      - name: Build API image in ACR
+        run: |
+          az acr build \
+            --registry "$HF_CONTAINER_REGISTRY_NAME" \
+            --image "$HF_API_REPOSITORY:$HF_IMAGE_TAG" \
+            --file Dockerfile.api \
+            .
+
+      - name: Build agent image in ACR
+        run: |
+          az acr build \
+            --registry "$HF_CONTAINER_REGISTRY_NAME" \
+            --image "$HF_AGENT_REPOSITORY:$HF_IMAGE_TAG" \
+            --file Dockerfile.agent \
+            .
+
+      - name: Build worker image in ACR
+        run: |
+          az acr build \
+            --registry "$HF_CONTAINER_REGISTRY_NAME" \
+            --image "$HF_WORKER_REPOSITORY:$HF_IMAGE_TAG" \
+            --file Dockerfile.worker \
+            .
+
       - name: Deploy Bicep
         run: |
           az deployment group create \
@@ -47,6 +97,8 @@ jobs:
             --parameters \
               location="$AZURE_LOCATION" \
               environmentName="$HF_ENVIRONMENT_NAME" \
+              containerRegistryName="$HF_CONTAINER_REGISTRY_NAME" \
+              containerRegistrySku="$HF_CONTAINER_REGISTRY_SKU" \
               storageAccountName="$HF_STORAGE_ACCOUNT_NAME" \
               storageContainerName="$HF_STORAGE_CONTAINER_NAME" \
               postgresServerName="$HF_POSTGRES_SERVER_NAME" \

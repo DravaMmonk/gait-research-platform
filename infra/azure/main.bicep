@@ -7,6 +7,9 @@ param environmentName string = 'dev'
 @description('Storage account name.')
 param storageAccountName string
 
+@description('Azure Container Registry name.')
+param containerRegistryName string
+
 @description('Primary blob container used by the application.')
 param storageContainerName string = 'hound-platform'
 
@@ -55,6 +58,18 @@ param agentImage string = 'ghcr.io/example/hound-agent:latest'
 
 @description('Worker container image.')
 param workerImage string = 'ghcr.io/example/hound-worker:latest'
+
+@description('Azure Container Registry SKU.')
+param containerRegistrySku string = 'Basic'
+
+module acr './modules/acr.bicep' = {
+  name: 'acr'
+  params: {
+    location: location
+    registryName: containerRegistryName
+    sku: containerRegistrySku
+  }
+}
 
 module storage './modules/storage.bicep' = {
   name: 'storage'
@@ -107,6 +122,8 @@ module apps './modules/containerapps.bicep' = {
     metadataDatabaseUrl: postgres.outputs.metadataDatabaseUrl
     storageAccountResourceId: storage.outputs.storageAccountId
     serviceBusNamespaceResourceId: servicebus.outputs.serviceBusNamespaceId
+    containerRegistryResourceId: acr.outputs.registryId
+    containerRegistryLoginServer: acr.outputs.loginServer
   }
 }
 
@@ -126,6 +143,10 @@ output infraContract object = {
     run_queue: servicebus.outputs.runQueueName
     agent_queue: servicebus.outputs.agentQueueName
   }
+  container_registry: {
+    name: acr.outputs.registryName
+    login_server: acr.outputs.loginServer
+  }
 }
 
 output storageAccountId string = storage.outputs.storageAccountId
@@ -136,4 +157,6 @@ output postgresServerFqdn string = postgres.outputs.postgresFqdn
 output postgresDatabase string = postgres.outputs.postgresDatabase
 output metadataDatabaseUrlSecretName string = apps.outputs.metadataDatabaseUrlSecretName
 output serviceBusNamespaceId string = servicebus.outputs.serviceBusNamespaceId
+output containerRegistryId string = acr.outputs.registryId
+output containerRegistryLoginServer string = acr.outputs.loginServer
 output containerAppsEnvironmentId string = apps.outputs.containerAppsEnvironmentId

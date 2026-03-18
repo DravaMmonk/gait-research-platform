@@ -8,6 +8,12 @@
     "environmentName": {
       "value": "dev"
     },
+    "containerRegistryName": {
+      "value": "hounddevacr"
+    },
+    "containerRegistrySku": {
+      "value": "Basic"
+    },
     "storageAccountName": {
       "value": "hounddevstorage"
     },

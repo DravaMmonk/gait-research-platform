@@ -6,6 +6,7 @@
 
 - [`main.bicep`](/Users/drava/Documents/Hound/hf-playground/infra/azure/main.bicep): top-level orchestration
 - [`modules/storage.bicep`](/Users/drava/Documents/Hound/hf-playground/infra/azure/modules/storage.bicep): Blob Storage account and container
+- [`modules/acr.bicep`](/Users/drava/Documents/Hound/hf-playground/infra/azure/modules/acr.bicep): Azure Container Registry
 - [`modules/postgres.bicep`](/Users/drava/Documents/Hound/hf-playground/infra/azure/modules/postgres.bicep): PostgreSQL server and database
 - [`modules/servicebus.bicep`](/Users/drava/Documents/Hound/hf-playground/infra/azure/modules/servicebus.bicep): Service Bus namespace plus `agent-runs` and `runs` queues
 - [`modules/containerapps.bicep`](/Users/drava/Documents/Hound/hf-playground/infra/azure/modules/containerapps.bicep): Container Apps runtime, identities, and app wiring
@@ -24,6 +25,8 @@ Create a local `infra/azure/parameters.dev.json` from that file and fill in secr
 
 - `blob.account_url`
 - `blob.container`
+- `container_registry.name`
+- `container_registry.login_server`
 - `postgres.host`
 - `postgres.database`
 - `postgres.user`

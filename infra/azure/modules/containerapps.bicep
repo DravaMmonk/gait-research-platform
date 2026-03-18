@@ -53,9 +53,16 @@ param storageAccountResourceId string
 @description('Service Bus namespace resource id for RBAC.')
 param serviceBusNamespaceResourceId string
 
+@description('Azure Container Registry resource id for RBAC.')
+param containerRegistryResourceId string
+
+@description('Azure Container Registry login server.')
+param containerRegistryLoginServer string
+
 var blobDataContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
 var serviceBusDataSenderRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39')
 var serviceBusDataReceiverRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0')
+var acrPullRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 var metadataDatabaseSecretName = 'hf-metadata-database-url'
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
@@ -64,6 +71,10 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing 
 
 resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2024-01-01' existing = {
   name: last(split(serviceBusNamespaceResourceId, '/'))
+}
+
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
+  name: last(split(containerRegistryResourceId, '/'))
 }
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -101,6 +112,12 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
         external: true
         targetPort: 8000
       }
+      registries: [
+        {
+          server: containerRegistryLoginServer
+          identity: 'system'
+        }
+      ]
       secrets: [
         {
           name: metadataDatabaseSecretName
@@ -170,6 +187,12 @@ resource agentApp 'Microsoft.App/containerApps@2024-03-01' = {
   properties: {
     managedEnvironmentId: containerEnv.id
     configuration: {
+      registries: [
+        {
+          server: containerRegistryLoginServer
+          identity: 'system'
+        }
+      ]
       secrets: [
         {
           name: metadataDatabaseSecretName
@@ -243,6 +266,12 @@ resource workerJob 'Microsoft.App/jobs@2024-03-01' = {
         parallelism: 1
         replicaCompletionCount: 1
       }
+      registries: [
+        {
+          server: containerRegistryLoginServer
+          identity: 'system'
+        }
+      ]
       secrets: [
         {
           name: metadataDatabaseSecretName
@@ -376,6 +405,36 @@ resource workerServiceBusReceiveAccess 'Microsoft.Authorization/roleAssignments@
   scope: serviceBusNamespace
   properties: {
     roleDefinitionId: serviceBusDataReceiverRoleId
+    principalId: workerJob.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource apiAcrPullAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(containerRegistryResourceId, apiApp.name, acrPullRoleId)
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: acrPullRoleId
+    principalId: apiApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource agentAcrPullAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(containerRegistryResourceId, agentApp.name, acrPullRoleId)
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: acrPullRoleId
+    principalId: agentApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource workerAcrPullAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(containerRegistryResourceId, workerJob.name, acrPullRoleId)
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: acrPullRoleId
     principalId: workerJob.identity.principalId
     principalType: 'ServicePrincipal'
   }

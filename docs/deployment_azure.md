@@ -30,6 +30,7 @@ The parameter file is not just an example. It is the environment contract for a 
 
 `infra/azure/main.bicep` provisions:
 
+- one Azure Container Registry for API, agent, and worker images
 - one Blob Storage account
 - one application Blob container for run and session assets
 - one Azure PostgreSQL Flexible Server and application database
@@ -53,6 +54,10 @@ The top-level deployment exports a stable `infraContract` object:
   "blob": {
     "account_url": "...",
     "container": "..."
+  },
+  "container_registry": {
+    "name": "...",
+    "login_server": "..."
   },
   "postgres": {
     "host": "...",
@@ -144,6 +149,8 @@ Do not introduce a local-filesystem-first code path for the cloud upload contrac
 
 Use `az deployment group create` against `infra/azure/main.bicep` with the required parameters:
 
+- Azure Container Registry name
+- Azure Container Registry SKU
 - storage account name
 - blob container name
 - PostgreSQL server name
@@ -175,6 +182,8 @@ The intended mapping is:
 - Worker Container Apps Job -> `Dockerfile.worker`
 
 The worker image should process a bounded batch of queue messages and exit. The Azure Job restarts it on the configured cron schedule.
+
+The GitHub Actions deployment workflow now uses `az acr build` to build and publish all three images into the provisioned registry before deploying Container Apps.
 
 ### 4. Deploy code
 
