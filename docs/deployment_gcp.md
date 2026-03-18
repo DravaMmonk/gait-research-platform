@@ -54,6 +54,8 @@ The GCP runtime expects these environment variables:
 - `HF_LLM_PROVIDER=vertex_ai`
 - `HF_LLM_MODEL=gemini-2.5-flash`
 
+`HF_GCP_LOCATION` is the Vertex AI model location. It is intentionally separate from `GCP_REGION`, which controls Cloud Run, Cloud SQL, Artifact Registry, and other regional infrastructure. For this deployment, Cloud Run stays in `australia-southeast2` while Vertex AI uses `australia-southeast1`.
+
 ## Runtime Entry Points
 
 The Cloud Run services use these Python entrypoints:
