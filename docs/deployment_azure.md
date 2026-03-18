@@ -183,7 +183,7 @@ The intended mapping is:
 
 The worker image should process a bounded batch of queue messages and exit. The Azure Job restarts it on the configured cron schedule.
 
-The GitHub Actions deployment workflow now uses `az acr build` to build and publish all three images into the provisioned registry before deploying Container Apps.
+The GitHub Actions deployment workflow now uses Docker Buildx on the GitHub runner to build and push all three images into the provisioned registry before deploying Container Apps.
 
 ### 4. Deploy code
 
