@@ -203,6 +203,29 @@ def test_agent_vertical_slice_designs_and_executes_tool_chain(tmp_path: Path) ->
     assert any(event.status == RunStatus.COMPLETED for event in detail.events)
 
 
+def test_get_run_logs_tool_returns_events_jobs_and_report_preview(tmp_path: Path) -> None:
+    service = build_service(tmp_path)
+    session = service.create_session(title="Run log session")
+    upload_video(service, session.session_id)
+    graph = ResearchGraph(
+        planner=ExperimentManifestPlanner(available_tools=service.container.tool_runner.describe_tools()),
+        tools=ToolRegistry(service),
+        run_monitor=InlineRunMonitor(service=service),
+    )
+
+    result = graph.invoke(goal="Generate a gait analysis report", session_id=session.session_id)
+    payload = service.tool_get_run_logs(result["run_id"]).data
+
+    assert payload["run"]["run_id"] == result["run_id"]
+    assert any(event["status"] == "completed" for event in payload["events"])
+    assert any(job["job_type"] == "run_execution" for job in payload["jobs"])
+    assert payload["report_assets"]
+    report_preview = payload["report_assets"][0]["preview"]
+    assert report_preview["available"] is True
+    assert report_preview["format"] == "json"
+    assert report_preview["content"]["summary"]["tool"] == "generate_report"
+
+
 def test_formula_infrastructure_round_trips_records(tmp_path: Path, monkeypatch) -> None:
     service = build_service(tmp_path)
     monkeypatch.setattr(
@@ -662,7 +685,43 @@ def test_api_chat_reports_registered_tools_for_tool_inventory_question(tmp_path:
     assert "create_run" in payload["message"]
     assert "extract_keypoints" in payload["message"]
     tool_names = {tool["name"] for tool in payload["structured_data"]["available_tools"]}
-    assert {"create_run", "read_metrics", "decode_video", "extract_keypoints"} <= tool_names
+    assert {"create_run", "read_metrics", "decode_video", "extract_keypoints", "get_run_logs"} <= tool_names
+
+
+def test_api_exposes_run_logs_endpoint(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'run-logs.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "run-logs-artifacts"))
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.intent_router.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.reasoner.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    app_module = importlib.import_module("hound_forward.api.app")
+    app_module.build_service.cache_clear()
+    app_module.build_chat_orchestrator.cache_clear()
+    client = TestClient(create_app())
+
+    session = client.post("/sessions", json={"title": "Run log API session"}).json()
+    client.post(
+        f"/sessions/{session['session_id']}/videos",
+        files={"file": ("sample.mp4", b"fake-video-binary", "video/mp4")},
+    )
+    run_response = client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "Analyze my dog's gait"},
+    )
+    run_id = run_response.json()["run_id"]
+
+    response = client.get(f"/runs/{run_id}/logs")
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["run"]["run_id"] == run_id
+    assert payload["jobs"]
+    assert payload["report_assets"]
 
 
 def test_api_chat_lists_current_session_videos_without_requiring_session_id_in_message(tmp_path: Path, monkeypatch) -> None:

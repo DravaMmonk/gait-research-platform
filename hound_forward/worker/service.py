@@ -4,7 +4,6 @@ from functools import lru_cache
 
 from fastapi import FastAPI
 
-from hound_forward.adapters.queue.gcp_pubsub import PubSubJobQueue
 from hound_forward.bootstrap import build_service
 from hound_forward.settings import PlatformSettings
 from hound_forward.worker.runtime import QueueWorkerRuntime
@@ -26,6 +25,10 @@ def create_app() -> FastAPI:
 
     @app.post("/pubsub/run-jobs")
     async def process_run_job(envelope: dict) -> dict:
+        from hound_forward.adapters.queue import PubSubJobQueue
+
+        if PubSubJobQueue is None:
+            raise ModuleNotFoundError("google-cloud-pubsub is required to process Pub/Sub push envelopes.")
         job = PubSubJobQueue.decode_push_envelope(envelope)
         run = build_runtime().run_job(job)
         return {"run_id": run.run_id, "status": run.status.value}

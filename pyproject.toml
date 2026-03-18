@@ -9,9 +9,6 @@ description = "AI-driven gait research platform MVP"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "azure-identity>=1.25",
-  "azure-servicebus>=7.14",
-  "azure-storage-blob>=12.27",
   "fastapi>=0.135",
   "google-genai>=1.11",
   "google-cloud-pubsub>=2.32",
@@ -29,7 +26,7 @@ dependencies = [
   "scikit-learn>=1.4",
   "scipy>=1.12",
   "seaborn>=0.13",
-  "sqlalchemy>=2.0",
+  "sqlalchemy>=2.0.45",
   "uvicorn>=0.41",
 ]
 

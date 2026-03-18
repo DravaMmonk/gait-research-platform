@@ -194,6 +194,13 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return run.model_dump(mode="json")
 
+    @app.get("/runs/{run_id}/logs")
+    def get_run_logs(run_id: str) -> dict:
+        try:
+            return service.get_run_logs(run_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.get("/runs")
     def list_runs(session_id: str | None = None) -> dict:
         return {"runs": [item.model_dump(mode="json") for item in service.list_runs(session_id=session_id)]}

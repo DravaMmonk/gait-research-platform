@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -372,6 +373,29 @@ class ResearchPlatformService:
             events=self.container.metadata.list_run_events(run_id),
         )
 
+    def get_run_logs(self, run_id: str) -> dict[str, Any]:
+        detail = self.get_run_detail(run_id)
+        jobs = self.list_jobs(run_id=run_id)
+        relevant_assets = [
+            asset for asset in detail.assets if asset.run_id == run_id and asset.kind in {AssetKind.REPORT, AssetKind.LOG, AssetKind.TEXT}
+        ]
+        if not relevant_assets:
+            relevant_assets = [asset for asset in detail.assets if asset.run_id == run_id and asset.kind != AssetKind.VIDEO]
+
+        return {
+            "run": detail.run.model_dump(mode="json"),
+            "events": [event.model_dump(mode="json") for event in detail.events],
+            "jobs": [job.model_dump(mode="json") for job in jobs],
+            "stage_results": [stage.model_dump(mode="json") for stage in detail.run.stage_results],
+            "report_assets": [
+                self._build_run_log_asset_entry(asset)
+                for asset in detail.assets
+                if asset.run_id == run_id and asset.kind == AssetKind.REPORT
+            ],
+            "log_assets": [self._build_run_log_asset_entry(asset) for asset in relevant_assets],
+            "latest_error": detail.run.error,
+        }
+
     def register_metric_definition(
         self,
         name: str,
@@ -537,6 +561,34 @@ class ResearchPlatformService:
         sanitized = "".join(char if char.isalnum() or char in {"-", "_", "."} else "-" for char in original)
         return f"{uuid4()}-{sanitized.lstrip('-') or 'attachment'}"
 
+    def _build_run_log_asset_entry(self, asset: AssetRecord) -> dict[str, Any]:
+        payload = asset.model_dump(mode="json")
+        payload["preview"] = self._read_asset_preview(asset)
+        return payload
+
+    @staticmethod
+    def _read_asset_preview(asset: AssetRecord) -> dict[str, Any]:
+        path = Path(asset.blob_path)
+        if not path.exists() or not path.is_file():
+            return {"available": False, "reason": "Asset preview is unavailable for non-local storage."}
+
+        suffix = path.suffix.lower()
+        if suffix not in {".json", ".log", ".txt", ".md"}:
+            return {"available": False, "reason": f"Preview not supported for {suffix or 'this asset type'}."}
+
+        try:
+            content = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            return {"available": False, "reason": "Asset content is not UTF-8 text."}
+
+        if suffix == ".json":
+            try:
+                return {"available": True, "format": "json", "content": json.loads(content)}
+            except json.JSONDecodeError:
+                return {"available": True, "format": "text", "content": content}
+
+        return {"available": True, "format": "text", "content": content}
+
     def tool_create_run(
         self,
         session_id: str,
@@ -554,6 +606,9 @@ class ResearchPlatformService:
     def tool_get_run(self, run_id: str) -> ToolResponse:
         run = self.get_run(run_id)
         return ToolResponse(ok=True, resource_id=run.run_id, status=run.status.value, data=run.model_dump(mode="json"))
+
+    def tool_get_run_logs(self, run_id: str) -> ToolResponse:
+        return ToolResponse(ok=True, resource_id=run_id, status="ok", data=self.get_run_logs(run_id))
 
     def tool_list_runs(self, session_id: str | None = None) -> ToolResponse:
         runs = [item.model_dump(mode="json") for item in self.list_runs(session_id=session_id)]

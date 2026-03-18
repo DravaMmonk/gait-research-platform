@@ -38,6 +38,12 @@ class ToolRegistry:
             "output_kind": "run",
             "scope": "platform_registry",
         },
+        "get_run_logs": {
+            "description": "Read execution events, jobs, stage outputs, and report previews for a single run.",
+            "input_kind": "run_id",
+            "output_kind": "run_execution_log",
+            "scope": "platform_registry",
+        },
         "list_runs": {
             "description": "List runs that belong to a session.",
             "input_kind": "session_id",
@@ -90,6 +96,7 @@ class ToolRegistry:
             "delete_session": self.service.tool_delete_session,
             "create_run": self._create_run,
             "get_run": self.service.tool_get_run,
+            "get_run_logs": self.service.tool_get_run_logs,
             "list_runs": self.service.tool_list_runs,
             "read_metrics": self.service.tool_read_metrics,
             "compare_runs": self.service.tool_compare_runs,

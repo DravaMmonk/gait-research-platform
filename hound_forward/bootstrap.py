@@ -15,10 +15,14 @@ def build_queue(*, settings: PlatformSettings, queue_name: str, topic: str, subs
     if settings.queue.backend == "azure_service_bus":
         if not settings.queue.azure_service_bus_namespace:
             raise ValueError("HF_AZURE_SERVICE_BUS_NAMESPACE is required when queue_backend=azure_service_bus.")
+        if AzureServiceBusQueue is None:
+            raise ModuleNotFoundError("azure-servicebus and azure-identity are required when queue_backend=azure_service_bus.")
         return AzureServiceBusQueue(settings.queue.azure_service_bus_namespace, queue_name)
     if settings.queue.backend == "gcp_pubsub":
         if not settings.queue.gcp_project_id:
             raise ValueError("HF_GCP_PROJECT_ID is required when queue_backend=gcp_pubsub.")
+        if PubSubJobQueue is None:
+            raise ModuleNotFoundError("google-cloud-pubsub is required when queue_backend=gcp_pubsub.")
         return PubSubJobQueue(
             project_id=settings.queue.gcp_project_id,
             topic=topic,
@@ -31,6 +35,8 @@ def build_queue(*, settings: PlatformSettings, queue_name: str, topic: str, subs
 def build_artifact_store(settings: PlatformSettings) -> ArtifactStore:
     backend = settings.artifact_storage.backend
     if backend == "azure_blob":
+        if AzureBlobArtifactStore is None:
+            raise ModuleNotFoundError("azure-storage-blob and azure-identity are required when artifact_backend=azure_blob.")
         return AzureBlobArtifactStore(
             container=settings.artifact_storage.azure_blob_container,
             account_url=settings.artifact_storage.azure_blob_account_url,
@@ -39,6 +45,8 @@ def build_artifact_store(settings: PlatformSettings) -> ArtifactStore:
     if backend == "gcs":
         if not settings.artifact_storage.gcs_bucket:
             raise ValueError("HF_GCP_STORAGE_BUCKET is required when artifact_backend=gcs.")
+        if GCSArtifactStore is None:
+            raise ModuleNotFoundError("google-cloud-storage is required when artifact_backend=gcs.")
         return GCSArtifactStore(
             bucket=settings.artifact_storage.gcs_bucket,
             project_id=settings.artifact_storage.gcp_project_id,

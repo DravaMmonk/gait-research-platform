@@ -332,6 +332,57 @@ export const toolLibraryEntries: ToolLibraryEntry[] = [
     },
   },
   {
+    id: "tool-get-run-logs",
+    kind: "tool",
+    title: "get_run_logs",
+    summary: "Read execution events, job states, and inline report previews for a run.",
+    category: "Debugging",
+    tags: ["run", "logs", "report", "debug"],
+    status: "stable",
+    contract: {
+      inputKind: "run_id",
+      outputKind: "run_execution_log",
+      outputArtifactName: "inline_response",
+      source: "hound_forward/application/services.py",
+      exampleInput: {
+        run_id: "run-001",
+      },
+      exampleOutput: {
+        run: {
+          run_id: "run-001",
+          status: "failed",
+        },
+        events: [
+          { status: "queued", message: "Run queued." },
+          { status: "running", message: "Run started." },
+          { status: "failed", message: "Run failed." },
+        ],
+        jobs: [
+          { job_type: "run_execution", status: "failed" },
+        ],
+        report_assets: [
+          {
+            kind: "report",
+            blob_path: "runs/run-001/report.json",
+            preview: {
+              available: true,
+              format: "json",
+              content: {
+                summary: {
+                  status: "failed",
+                },
+              },
+            },
+          },
+        ],
+        latest_error: {
+          type: "ValueError",
+          message: "Keypoint extraction returned no frames.",
+        },
+      },
+    },
+  },
+  {
     id: "tool-visualize-pysr-manifest",
     kind: "tool",
     title: "visualize_pysr_manifest",
