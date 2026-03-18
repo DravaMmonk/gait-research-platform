@@ -44,11 +44,11 @@ function SessionAvatar({ session, muted = false }: { session: ConsoleSession; mu
 function SidebarBrand() {
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <span className="inline-flex h-11 w-14 items-center justify-center rounded-[0.95rem] bg-primary shadow-panel">
+      <span className="inline-flex h-11 w-14 items-center justify-center rounded-[0.95rem]">
         <Image
-          src="/houndforward_logo.png"
+          src="/logo.png"
           alt="Hound Forward"
-          className="h-auto w-12 object-contain"
+          className="h-auto w-14 object-contain"
           width={56}
           height={32}
           priority
