@@ -37,19 +37,21 @@ The current runtime slice is an agent-designed modular tool chain, not a product
 
 - `LangGraph planner`: selects the tool chain for a goal
 - `Chat orchestrator`: routes chat requests into execution, explanation, or direct answers
-- `Agent tools`: execute modular stages such as video decode, keypoint extraction, metrics, and reporting
-- `Local worker bridge`: drains queued runs so the same run contract can be exercised locally
+- `Agent runtime`: consumes `agent-runs` jobs and coordinates LangGraph execution remotely
+- `Run worker`: consumes `runs` jobs and executes modular stages such as video decode, keypoint extraction, metrics, and reporting
+- `Job store`: persists `pending -> running -> completed/failed` state for remote agent jobs
 
 The validated slice is:
 
 ```text
 upload video
--> agent plans tool chain
--> create run
--> enqueue job
+-> API enqueues agent job
+-> agent runtime plans tool chain
+-> agent creates run
+-> agent enqueues run job
 -> worker executes modular tools
 -> tool-chain metrics output
--> agent reads result
+-> agent stores result payload
 ```
 
 The default tool chain writes:
@@ -90,6 +92,18 @@ Run the FastAPI service:
 uvicorn hound_forward.api.app:app --reload
 ```
 
+Run the agent runtime:
+
+```bash
+python -m hound_forward.agent.main
+```
+
+Run the pipeline worker:
+
+```bash
+python -m hound_forward.worker.main
+```
+
 If you want to enable the real LLM-backed planner and chat orchestration, configure:
 
 ```bash
@@ -116,7 +130,7 @@ The target Azure deployment includes:
 
 - Azure PostgreSQL Flexible Server for metadata
 - Azure Blob Storage for videos, keypoints, signals, metrics, reports, and logs
-- Azure Service Bus for queued runs
+- Azure Service Bus for `agent-runs` and `runs`
 - Azure Container Apps for the API and agent runtime
 - Azure Container Apps Jobs for workers
 - Azure Monitor and Log Analytics for observability

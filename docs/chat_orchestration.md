@@ -87,6 +87,7 @@ The frontend uses `progress_messages` as pseudo-streaming text before rendering 
 ## Compatibility Notes
 
 - `/agent/console/respond` remains available for compatibility with the older console contract.
+- `/agent/execute-plan` now submits an asynchronous `agent_execution` job and returns a persisted job record instead of executing inline inside the API process.
 - New chat development should target `/api/chat`.
 - The CopilotKit adapter is a transport layer only. The backend orchestrator is the source of truth for chat behavior.
 

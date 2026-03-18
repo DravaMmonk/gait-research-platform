@@ -25,6 +25,7 @@ The platform core manages:
 - metric definitions
 - metric results
 - run events
+- remote jobs
 - formula definitions
 - formula proposals
 - formula evaluations
@@ -36,8 +37,10 @@ The current compute path is a runtime validation slice:
 
 - `PlatformRunExecutor`: executes agent-designed modular tool stages
 - `LocalArtifactStore`: placeholder local storage adapter
-- `InMemoryQueue`: placeholder local queue
-- `PlaceholderLocalWorkerBridge`: local worker boundary for agent and local testing
+- `InMemoryJobQueue`: local queue backend for validation
+- `QueueWorkerRuntime`: queue consumer for run execution
+- `AgentRuntime`: queue consumer for remote LangGraph execution
+- `InlineRunMonitor`: local-only helper used in tests and single-process validation
 
 The pipeline ingests one uploaded video asset plus a manifest and produces structured fake outputs.
 
@@ -68,7 +71,7 @@ The public surface is intentionally chat-first and narrow. Preview content, modu
 
 - Azure PostgreSQL Flexible Server: metadata
 - Azure Blob Storage: large artifacts
-- Azure Service Bus: run queue
+- Azure Service Bus: `agent-runs` and `runs` queues
 - Azure Container Apps: API and agent services
 - Azure Container Apps Jobs / GPU VM: workers
 - Azure Monitor: logs and run observability

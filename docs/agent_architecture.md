@@ -6,7 +6,19 @@ The agent layer is a research orchestrator, not a code authoring layer. It coord
 
 ## Runtime Model
 
-The LangGraph research loop is:
+The production-aligned execution path is queue-driven:
+
+```text
+client request
+  -> API
+  -> jobs table (agent_execution, pending)
+  -> Service Bus agent-runs queue
+  -> agent container
+  -> LangGraph research loop
+  -> jobs table (completed or failed)
+```
+
+Inside the agent runtime, the LangGraph research loop remains:
 
 ```text
 goal
@@ -19,22 +31,24 @@ goal
   -> recommendation
 ```
 
+The agent does not execute pipeline stages inline. It creates and observes `RunRecord` state while a separate worker consumes the `runs` queue.
+
 ## Boundaries
 
 The agent may:
 
 - generate an `ExperimentManifest`
 - create runs
-- enqueue runs
+- enqueue runs through the application service
 - fetch run status, assets, and metrics
 - compare runs
-- recommend the next experiment step
+- write structured job results and recommendations
 
 The agent may not:
 
 - write source code
 - write directly to Azure PostgreSQL
-- push messages directly to Azure Service Bus
+- push queue messages outside the application boundary
 - manipulate Azure Blob Storage directly
 - bypass the platform application layer
 
@@ -52,7 +66,7 @@ The primary tools are:
 
 Each tool returns a structured `ToolResponse` payload so the graph never depends on free-text control flow.
 
-In local runtime validation mode, the graph may wait through a `PlaceholderLocalWorkerBridge`. That bridge is explicitly a placeholder and not a production worker runtime.
+In local validation mode, the graph may use an inline run monitor so the same contract can be exercised in one process. In Azure, the graph only polls persisted run state.
 
 ## State Contract
 
@@ -67,4 +81,16 @@ The graph state stores:
 - metrics
 - recommendation
 
-All node inputs and outputs are typed. The graph performs reasoning only; execution always flows through tools.
+The remote job state is persisted separately:
+
+- `job_id`
+- `job_type`
+- `status`
+- `session_id`
+- `run_id`
+- `payload`
+- `metadata`
+- `result`
+- `error`
+
+All node inputs and outputs are typed. The graph performs reasoning only; execution always flows through tools and persisted state transitions.
