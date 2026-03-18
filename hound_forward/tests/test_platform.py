@@ -813,7 +813,7 @@ def test_agent_cloud_run_service_processes_pubsub_job(tmp_path: Path, monkeypatc
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "completed"
-    assert payload["run_status"] == "completed"
+    assert payload["result"]["run_status"] == "completed"
 
 
 def test_worker_cloud_run_service_processes_pubsub_job(tmp_path: Path, monkeypatch) -> None:

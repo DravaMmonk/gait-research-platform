@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from hound_forward.agent_tools import summarize_manifest
+from hound_forward.settings import PlatformSettings
 
 from hound_forward.domain import (
     ActiveContext,
