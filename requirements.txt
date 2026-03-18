@@ -18,5 +18,4 @@ scikit-learn>=1.4
 scipy>=1.12
 seaborn>=0.13
 sqlalchemy>=2.0
-torch>=2.2
 uvicorn>=0.41

@@ -20,6 +20,7 @@ The GCP topology maps the current runtime to:
 - Cloud SQL for PostgreSQL for metadata
 - Cloud Storage for assets
 - Artifact Registry for runtime images
+- Cloud Build for image builds
 - Cloud Logging and Cloud Monitoring for logs and metrics
 
 ## Why Push Subscriptions
@@ -77,10 +78,33 @@ That path is translated into `HF_METADATA_DATABASE_URL` for SQLAlchemy and Psyco
 ## Deployment Flow
 
 1. Provision the base GCP resources with `infra/gcp/bootstrap.sh`.
-2. Build and push the API, agent, and worker images.
+2. Build and push the API, agent, and worker images with Cloud Build.
 3. Deploy the three Cloud Run services with `infra/gcp/deploy.sh`.
 4. Create or update Pub/Sub push subscriptions so they target the agent and worker service endpoints.
 5. Apply `db/schema.sql` to the Cloud SQL database if schema creation is managed outside the app bootstrap.
+
+## Build Strategy
+
+The deployment script builds images with Cloud Build instead of local Docker. This avoids host architecture drift on Apple Silicon and guarantees Cloud Run-compatible manifests.
+
+The repository now includes a `.gcloudignore` file so Cloud Build uploads only the runtime sources needed by the Dockerfiles.
+
+## Bootstrap Responsibilities
+
+`infra/gcp/bootstrap.sh` now prepares:
+
+- Artifact Registry and the runtime storage bucket
+- the Cloud Build source bucket
+- IAM bindings for the default Compute Engine service account used by Cloud Build
+- Cloud SQL, Pub/Sub topics, runtime service accounts, and Pub/Sub push impersonation
+
+The Cloud Build service path requires:
+
+- `roles/artifactregistry.writer`
+- `roles/logging.logWriter`
+- `roles/storage.objectAdmin` on the Cloud Build source bucket
+
+The bootstrap script applies those bindings automatically.
 
 ## Files Introduced For GCP
 

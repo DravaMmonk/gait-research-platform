@@ -23,12 +23,23 @@ required_vars=(
   HF_PLANNER_MODE
 )
 
+if ! command -v gcloud >/dev/null 2>&1; then
+  echo "gcloud is required but was not found in PATH." >&2
+  exit 1
+fi
+
 for var_name in "${required_vars[@]}"; do
   if [[ -z "${!var_name:-}" ]]; then
     echo "Missing required environment variable: ${var_name}" >&2
     exit 1
   fi
 done
+
+ACTIVE_ACCOUNT="$(gcloud auth list --filter=status:ACTIVE --format='value(account)')"
+if [[ -z "${ACTIVE_ACCOUNT}" ]]; then
+  echo "No active gcloud account is configured. Run 'gcloud auth login' first." >&2
+  exit 1
+fi
 
 IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 REGISTRY_HOST="${GCP_REGION}-docker.pkg.dev"
@@ -61,17 +72,53 @@ COMMON_ENV_VARS=(
   "HF_PLANNER_MODE=${HF_PLANNER_MODE}"
 )
 
-if [[ -n "${OPENAI_API_KEY:-}" ]]; then
-  COMMON_ENV_VARS+=("OPENAI_API_KEY=${OPENAI_API_KEY}")
-fi
+TEMP_ENV_FILE="$(mktemp -t hound-forward-gcp-env.XXXXXX.yaml)"
+TEMP_CLOUDBUILD_FILE="$(mktemp -t hound-forward-cloudbuild.XXXXXX.yaml)"
+cleanup() {
+  rm -f "${TEMP_ENV_FILE}"
+  rm -f "${TEMP_CLOUDBUILD_FILE}"
+}
+trap cleanup EXIT
 
-ENV_ARG="$(IFS=,; echo "${COMMON_ENV_VARS[*]}")"
+{
+  for item in "${COMMON_ENV_VARS[@]}"; do
+    key="${item%%=*}"
+    value="${item#*=}"
+    printf "%s: \"%s\"\n" "${key}" "${value//\"/\\\"}"
+  done
+  if [[ -n "${OPENAI_API_KEY:-}" ]]; then
+    printf "OPENAI_API_KEY: \"%s\"\n" "${OPENAI_API_KEY//\"/\\\"}"
+  fi
+} > "${TEMP_ENV_FILE}"
 
 gcloud config set project "${GCP_PROJECT_ID}" >/dev/null
 
-gcloud builds submit --tag "${API_IMAGE}" --file Dockerfile.api .
-gcloud builds submit --tag "${AGENT_IMAGE}" --file Dockerfile.agent .
-gcloud builds submit --tag "${WORKER_IMAGE}" --file Dockerfile.worker .
+build_and_push_image() {
+  local dockerfile_path="$1"
+  local image_ref="$2"
+
+  cat > "${TEMP_CLOUDBUILD_FILE}" <<EOF
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - ${dockerfile_path}
+      - --tag
+      - ${image_ref}
+      - .
+images:
+  - ${image_ref}
+EOF
+
+  gcloud builds submit \
+    --config "${TEMP_CLOUDBUILD_FILE}" \
+    .
+}
+
+build_and_push_image Dockerfile.api "${API_IMAGE}"
+build_and_push_image Dockerfile.agent "${AGENT_IMAGE}"
+build_and_push_image Dockerfile.worker "${WORKER_IMAGE}"
 
 gcloud run deploy "${API_SERVICE_NAME}" \
   --image "${API_IMAGE}" \
@@ -79,7 +126,7 @@ gcloud run deploy "${API_SERVICE_NAME}" \
   --service-account "${HF_API_SERVICE_ACCOUNT}@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
   --allow-unauthenticated \
   --port 8000 \
-  --set-env-vars "${ENV_ARG}" \
+  --env-vars-file "${TEMP_ENV_FILE}" \
   --add-cloudsql-instances "${CLOUD_SQL_CONNECTION}"
 
 gcloud run deploy "${AGENT_SERVICE_NAME}" \
@@ -90,7 +137,7 @@ gcloud run deploy "${AGENT_SERVICE_NAME}" \
   --port 8080 \
   --command uvicorn \
   --args "hound_forward.agent.service:app,--host,0.0.0.0,--port,8080" \
-  --set-env-vars "${ENV_ARG}" \
+  --env-vars-file "${TEMP_ENV_FILE}" \
   --add-cloudsql-instances "${CLOUD_SQL_CONNECTION}"
 
 gcloud run deploy "${WORKER_SERVICE_NAME}" \
@@ -101,7 +148,7 @@ gcloud run deploy "${WORKER_SERVICE_NAME}" \
   --port 8080 \
   --command uvicorn \
   --args "hound_forward.worker.service:app,--host,0.0.0.0,--port,8080" \
-  --set-env-vars "${ENV_ARG}" \
+  --env-vars-file "${TEMP_ENV_FILE}" \
   --add-cloudsql-instances "${CLOUD_SQL_CONNECTION}"
 
 PUSH_MEMBER="serviceAccount:${HF_PUBSUB_PUSH_SERVICE_ACCOUNT}@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
