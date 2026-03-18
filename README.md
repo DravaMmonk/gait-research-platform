@@ -1,9 +1,9 @@
 # Hound Forward Research Platform
 
-Hound Forward is now structured as an Azure-aligned, AI-native research platform for canine movement analysis. The repository combines:
+Hound Forward is now structured as a cloud-portable, AI-native research platform for canine movement analysis. The repository combines:
 
-- a run-centric metadata layer backed by Azure PostgreSQL semantics
-- Azure Blob-aligned artifact storage
+- a run-centric metadata layer backed by PostgreSQL semantics
+- pluggable artifact storage backends
 - queue-driven compute orchestration
 - LangGraph-based agent orchestration through modular internal tools
 - a research console scaffold for experiments, runs, metrics, datasets, and agent workflows
@@ -12,8 +12,9 @@ Hound Forward is now structured as an Azure-aligned, AI-native research platform
 
 - `hound_forward/`: platform domain, application services, adapters, API, agent orchestration, modular tools, and deterministic local worker
 - `hound_forward/manifests/`: versioned manifest examples for agent-planned protocol runs
-- `db/schema.sql`: Azure PostgreSQL schema for metadata
+- `db/schema.sql`: PostgreSQL schema for metadata
 - `infra/azure/`: Bicep scaffold for Azure infrastructure
+- `infra/gcp/`: Cloud Run deployment scripts for Google Cloud
 - `frontend/research_console/`: Next.js research UI scaffold
 - `frontend/research_console/components/ui/`: shared `shadcn/ui`-style primitive layer aligned to Hound Forward tokens
 - `docs/`: platform architecture, agent architecture, deployment, and migration notes
@@ -29,7 +30,7 @@ The platform centers on these primary resources:
 - `MetricResult`
 - `ExperimentManifest`
 
-All experiment, metric evaluation, and agent analysis activity is modeled as a run. Azure Blob stores large artifacts. Azure PostgreSQL stores metadata only.
+All experiment, metric evaluation, and agent analysis activity is modeled as a run. The artifact store is backend-specific. Metadata remains PostgreSQL-only.
 
 ## Agent Tool Runtime
 
@@ -124,17 +125,21 @@ Frontend architecture notes live in:
 
 - [frontend/research_console/README.md](/Users/drava/Documents/Hound/hf-playground/frontend/research_console/README.md)
 
-## Azure Deployment Shape
+## Cloud Deployment Shape
 
-The target Azure deployment includes:
+The repository now supports two cloud deployment shapes:
 
-- Azure Container Registry for runtime images
-- Azure PostgreSQL Flexible Server for metadata
-- Azure Blob Storage for videos, keypoints, signals, metrics, reports, and logs
-- Azure Service Bus for `agent-runs` and `runs`
-- Azure Container Apps for the API and agent runtime
-- Azure Container Apps Jobs for workers
-- Azure Monitor and Log Analytics for observability
+- Azure with Container Apps and Service Bus
+- GCP with Cloud Run services and Pub/Sub push delivery
+
+The GCP path deploys:
+
+- Artifact Registry for runtime images
+- Cloud SQL for PostgreSQL for metadata
+- Cloud Storage for videos, keypoints, signals, metrics, reports, and logs
+- Pub/Sub topics and push subscriptions for `agent-runs` and `runs`
+- Cloud Run for the API, agent runtime, and worker runtime
+- Cloud Logging and Cloud Monitoring for observability
 
 See:
 
@@ -143,6 +148,7 @@ See:
 - [docs/chat_orchestration.md](/Users/drava/Documents/Hound/hf-playground/docs/chat_orchestration.md)
 - [docs/module_layout.md](/Users/drava/Documents/Hound/hf-playground/docs/module_layout.md)
 - [docs/deployment_azure.md](/Users/drava/Documents/Hound/hf-playground/docs/deployment_azure.md)
+- [docs/deployment_gcp.md](/Users/drava/Documents/Hound/hf-playground/docs/deployment_gcp.md)
 - [docs/frontend_design_spec.md](/Users/drava/Documents/Hound/hf-playground/docs/frontend_design_spec.md)
 - [docs/migration_from_mvp.md](/Users/drava/Documents/Hound/hf-playground/docs/migration_from_mvp.md)
 - [docs/runtime_validation.md](/Users/drava/Documents/Hound/hf-playground/docs/runtime_validation.md)

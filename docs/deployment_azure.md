@@ -79,10 +79,10 @@ This is the boundary between infra and app runtime.
 The Bicep template now injects or derives the core runtime settings expected by the app:
 
 - `HF_METADATA_DATABASE_URL`
+- `HF_ARTIFACT_BACKEND=azure_blob`
 - `HF_AZURE_BLOB_ACCOUNT_URL`
 - `HF_AZURE_BLOB_CONTAINER`
 - `HF_AZURE_SERVICE_BUS_NAMESPACE`
-- `HF_AZURE_SERVICE_BUS_QUEUE`
 - `HF_AZURE_SERVICE_BUS_RUN_QUEUE`
 - `HF_AZURE_SERVICE_BUS_AGENT_QUEUE`
 - `HF_QUEUE_BACKEND`
@@ -99,6 +99,7 @@ Use `HF_AZURE_BLOB_CONNECTION_STRING` when developing against Azurite or another
 ### Option A: Connect to Azure cloud resources
 
 - point `HF_METADATA_DATABASE_URL` at the Azure PostgreSQL database
+- set `HF_ARTIFACT_BACKEND=azure_blob`
 - set `HF_AZURE_BLOB_ACCOUNT_URL` to the Storage Account Blob endpoint
 - set `HF_AZURE_BLOB_CONTAINER` to the Bicep-managed application container
 - authenticate locally with `az login` so the SDK can use `DefaultAzureCredential`
@@ -108,6 +109,7 @@ Use `HF_AZURE_BLOB_CONNECTION_STRING` when developing against Azurite or another
 - run a PostgreSQL instance locally
 - run Azurite for Blob Storage
 - set `HF_METADATA_DATABASE_URL` to the local PostgreSQL database
+- set `HF_ARTIFACT_BACKEND=azure_blob`
 - set `HF_AZURE_BLOB_CONNECTION_STRING` to the Azurite connection string
 - set `HF_AZURE_BLOB_CONTAINER` to the same logical container name used in cloud
 

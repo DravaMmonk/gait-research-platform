@@ -12,8 +12,8 @@ The production-aligned execution path is queue-driven:
 client request
   -> API
   -> jobs table (agent_execution, pending)
-  -> Service Bus agent-runs queue
-  -> agent container
+  -> queue transport for agent-runs
+  -> agent runtime
   -> LangGraph research loop
   -> jobs table (completed or failed)
 ```
@@ -31,7 +31,7 @@ goal
   -> recommendation
 ```
 
-The agent does not execute pipeline stages inline. It creates and observes `RunRecord` state while a separate worker consumes the `runs` queue.
+The agent does not execute pipeline stages inline. It creates and observes `RunRecord` state while a separate worker consumes the `runs` queue or subscription.
 
 ## Boundaries
 
@@ -47,9 +47,9 @@ The agent may:
 The agent may not:
 
 - write source code
-- write directly to Azure PostgreSQL
+- write directly to the metadata database
 - push queue messages outside the application boundary
-- manipulate Azure Blob Storage directly
+- manipulate object storage directly
 - bypass the platform application layer
 
 ## Tool Surface
@@ -66,7 +66,17 @@ The primary tools are:
 
 Each tool returns a structured `ToolResponse` payload so the graph never depends on free-text control flow.
 
-In local validation mode, the graph may use an inline run monitor so the same contract can be exercised in one process. In Azure, the graph only polls persisted run state.
+In local validation mode, the graph may use an inline run monitor so the same contract can be exercised in one process. In cloud deployments, the graph only polls persisted run state.
+
+## Cloud Run Path
+
+The GCP deployment keeps the LangGraph runtime unchanged and adds small HTTP adapters around the existing agent and worker runtimes:
+
+- Pub/Sub push sends job envelopes to Cloud Run
+- `hound_forward.agent.service` decodes the agent job and calls `AgentRuntime.run_job`
+- `hound_forward.worker.service` decodes the run job and calls `QueueWorkerRuntime.run_job`
+
+This preserves the graph and application boundaries while making the runtime compatible with Cloud Run request handling.
 
 ## State Contract
 

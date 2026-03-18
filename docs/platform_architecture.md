@@ -10,7 +10,7 @@ Research Console
     -> Tool Registry
     -> Research Platform Core
     -> Compute Pipeline
-    -> Azure Storage / Queue / PostgreSQL
+    -> Cloud Storage / Queue / PostgreSQL
 ```
 
 ## Subsystems
@@ -67,14 +67,17 @@ The Next.js frontend currently exposes:
 
 The public surface is intentionally chat-first and narrow. Preview content, module galleries, and tool contract references live in the hidden `/dev` route rather than the homepage.
 
-## Azure Mapping
+## Cloud Mapping
 
-- Azure PostgreSQL Flexible Server: metadata
-- Azure Blob Storage: large artifacts
-- Azure Service Bus: `agent-runs` and `runs` queues
-- Azure Container Apps: API and agent services
-- Azure Container Apps Jobs / GPU VM: workers
-- Azure Monitor: logs and run observability
+- PostgreSQL-compatible database: metadata
+- object storage: large artifacts
+- queue or topic/subscription delivery: `agent-runs` and `runs`
+- HTTP compute services: API, agent runtime, and worker runtime
+- cloud observability stack: logs, traces, and metrics
+
+The current Azure deployment uses PostgreSQL Flexible Server, Blob Storage, Service Bus, and Container Apps.
+
+The current GCP deployment path uses Cloud SQL for PostgreSQL, Cloud Storage, Pub/Sub push delivery, and Cloud Run services.
 
 ## Formula Preparedness
 
