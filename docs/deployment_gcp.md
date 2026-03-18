@@ -43,6 +43,7 @@ The GCP runtime expects these environment variables:
 - `HF_METADATA_DATABASE_URL=postgresql+psycopg://...`
 - `HF_ARTIFACT_BACKEND=gcs`
 - `HF_GCP_PROJECT_ID=...`
+- `HF_GCP_LOCATION=...`
 - `HF_GCP_STORAGE_BUCKET=...`
 - `HF_QUEUE_BACKEND=gcp_pubsub`
 - `HF_GCP_PUBSUB_RUN_TOPIC=runs`
@@ -50,7 +51,8 @@ The GCP runtime expects these environment variables:
 - `HF_GCP_PUBSUB_AGENT_TOPIC=agent-runs`
 - `HF_GCP_PUBSUB_AGENT_SUBSCRIPTION=agent-runs-runtime`
 - `HF_PLACEHOLDER_WORKER_MODE=false`
-- `OPENAI_API_KEY=...`
+- `HF_LLM_PROVIDER=vertex_ai`
+- `HF_LLM_MODEL=gemini-2.5-flash`
 
 ## Runtime Entry Points
 
@@ -96,7 +98,7 @@ The repository now includes a `.gcloudignore` file so Cloud Build uploads only t
 - Artifact Registry and the runtime storage bucket
 - the Cloud Build source bucket
 - IAM bindings for the default Compute Engine service account used by Cloud Build
-- Cloud SQL, Pub/Sub topics, runtime service accounts, and Pub/Sub push impersonation
+- Cloud SQL, Pub/Sub topics, runtime service accounts, Vertex AI access, and Pub/Sub push impersonation
 
 The Cloud Build service path requires:
 

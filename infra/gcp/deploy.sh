@@ -61,6 +61,7 @@ COMMON_ENV_VARS=(
   "HF_METADATA_DATABASE_URL=${HF_METADATA_DATABASE_URL}"
   "HF_ARTIFACT_BACKEND=gcs"
   "HF_GCP_PROJECT_ID=${GCP_PROJECT_ID}"
+  "HF_GCP_LOCATION=${GCP_REGION}"
   "HF_GCP_STORAGE_BUCKET=${HF_GCP_STORAGE_BUCKET}"
   "HF_QUEUE_BACKEND=gcp_pubsub"
   "HF_GCP_PUBSUB_RUN_TOPIC=${HF_GCP_PUBSUB_RUN_TOPIC}"
@@ -68,6 +69,7 @@ COMMON_ENV_VARS=(
   "HF_GCP_PUBSUB_AGENT_TOPIC=${HF_GCP_PUBSUB_AGENT_TOPIC}"
   "HF_GCP_PUBSUB_AGENT_SUBSCRIPTION=${HF_GCP_PUBSUB_AGENT_SUBSCRIPTION}"
   "HF_PLACEHOLDER_WORKER_MODE=false"
+  "HF_LLM_PROVIDER=vertex_ai"
   "HF_LLM_MODEL=${HF_LLM_MODEL}"
   "HF_PLANNER_MODE=${HF_PLANNER_MODE}"
 )
@@ -86,9 +88,6 @@ trap cleanup EXIT
     value="${item#*=}"
     printf "%s: \"%s\"\n" "${key}" "${value//\"/\\\"}"
   done
-  if [[ -n "${OPENAI_API_KEY:-}" ]]; then
-    printf "OPENAI_API_KEY: \"%s\"\n" "${OPENAI_API_KEY//\"/\\\"}"
-  fi
 } > "${TEMP_ENV_FILE}"
 
 gcloud config set project "${GCP_PROJECT_ID}" >/dev/null

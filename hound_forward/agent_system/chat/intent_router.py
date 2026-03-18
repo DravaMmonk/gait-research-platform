@@ -5,10 +5,12 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from hound_forward.agent_system.llm import OpenAIResponsesJSONClient
+from hound_forward.agent_system.llm import StructuredJSONClient
 from hound_forward.domain import ChatContext, ChatIntent
 
 logger = logging.getLogger(__name__)
+
+OpenAIResponsesJSONClient = StructuredJSONClient
 
 
 class _IntentEnvelope(BaseModel):
@@ -18,7 +20,7 @@ class _IntentEnvelope(BaseModel):
 class IntentRouter:
     def __init__(self, model: str) -> None:
         self.model = model
-        self.client = OpenAIResponsesJSONClient(model=model)
+        self.client = StructuredJSONClient(model=model)
 
     def classify(self, *, message: str, context: ChatContext | None = None) -> ChatIntent:
         try:

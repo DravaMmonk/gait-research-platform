@@ -6,12 +6,14 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from hound_forward.agent_system.llm import OpenAIResponsesJSONClient
+from hound_forward.agent_system.llm import StructuredJSONClient
 from hound_forward.domain import ExecutionPlan, ExperimentManifest
 
 from .experiment_planner import ExperimentManifestPlanner
 
 logger = logging.getLogger(__name__)
+
+OpenAIResponsesJSONClient = StructuredJSONClient
 
 
 class _ManifestEnvelope(BaseModel):
@@ -37,7 +39,7 @@ class LLMExperimentPlanner:
         self.default_runner = default_runner
         self.available_tools = list(available_tools or [])
         self.fallback_planner = fallback_planner
-        self.client = OpenAIResponsesJSONClient(model=model)
+        self.client = StructuredJSONClient(model=model)
 
     def plan(self, goal: str, dataset_video_ids: list[str] | None = None) -> ExperimentManifest:
         prompt = (

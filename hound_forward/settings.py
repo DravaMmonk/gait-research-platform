@@ -48,13 +48,14 @@ class WorkerRuntimeSettings(BaseModel):
 
 
 class AgentRuntimeSettings(BaseModel):
+    llm_provider: str
     llm_model: str
     recursion_limit: int
     planner_mode: str
 
 
 class PlatformSettings(BaseSettings):
-    """Runtime settings for local development and Azure deployment."""
+    """Runtime settings for local development and cloud deployment."""
 
     model_config = SettingsConfigDict(env_prefix="HF_", env_file=".env", extra="ignore")
 
@@ -68,6 +69,7 @@ class PlatformSettings(BaseSettings):
     azure_blob_connection_string: str | None = None
     azure_blob_container: str = "hound-platform"
     gcp_project_id: str | None = None
+    gcp_location: str = "global"
     gcp_storage_bucket: str | None = None
     gcp_storage_endpoint: str | None = None
 
@@ -90,7 +92,8 @@ class PlatformSettings(BaseSettings):
     formula_evaluation_mode: str = "scaffold"
     worker_max_idle_polls: int = 3
     worker_max_runs_per_invocation: int = 20
-    llm_model: str = "gpt-4o-mini"
+    llm_provider: str = "vertex_ai"
+    llm_model: str = "gemini-2.5-flash"
     agent_recursion_limit: int = 12
     planner_mode: str = "hybrid"
 
@@ -151,6 +154,7 @@ class PlatformSettings(BaseSettings):
     @property
     def agent_runtime(self) -> AgentRuntimeSettings:
         return AgentRuntimeSettings(
+            llm_provider=self.llm_provider,
             llm_model=self.llm_model,
             recursion_limit=self.agent_recursion_limit,
             planner_mode=self.planner_mode,

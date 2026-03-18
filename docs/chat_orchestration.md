@@ -36,7 +36,7 @@ The backend supports three planner modes through `HF_PLANNER_MODE`:
 - `llm`: prefer the LLM planner as the primary planner
 - `deterministic`: disable the LLM planner entirely
 
-The LLM model is configured through `HF_LLM_MODEL`. OpenAI access is provided through `OPENAI_API_KEY`.
+The LLM provider is configured through `HF_LLM_PROVIDER`, which now defaults to `vertex_ai`. Gemini model selection is configured through `HF_LLM_MODEL`, and Vertex AI uses the runtime service account together with `HF_GCP_PROJECT_ID` and `HF_GCP_LOCATION`.
 
 ## `/api/chat` Contract
 

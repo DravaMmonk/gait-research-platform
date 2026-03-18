@@ -45,6 +45,7 @@ fi
 
 gcloud services enable \
   artifactregistry.googleapis.com \
+  aiplatform.googleapis.com \
   cloudbuild.googleapis.com \
   cloudresourcemanager.googleapis.com \
   pubsub.googleapis.com \
@@ -139,6 +140,15 @@ do
   gcloud storage buckets add-iam-policy-binding "gs://${HF_GCP_STORAGE_BUCKET}" \
     --member "${member}" \
     --role roles/storage.objectAdmin >/dev/null
+done
+
+for llm_account in \
+  "${HF_API_SERVICE_ACCOUNT}" \
+  "${HF_AGENT_SERVICE_ACCOUNT}"
+do
+  gcloud projects add-iam-policy-binding "${GCP_PROJECT_ID}" \
+    --member "serviceAccount:${llm_account}@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+    --role roles/aiplatform.user >/dev/null
 done
 
 for publisher_account in \

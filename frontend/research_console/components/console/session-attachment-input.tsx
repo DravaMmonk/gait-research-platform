@@ -173,10 +173,10 @@ export function SessionAttachmentInput({
               className="copilotKitInputControlButton sessionAttachmentButton"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading || !threadId}
-              aria-label="Upload attachment"
+              aria-label="Attach files"
+              title="Attach files"
             >
               {isUploading ? <LoaderCircle size={18} className="animate-spin" /> : <Paperclip size={18} />}
-              <span>附件</span>
             </button>
             <span className="sessionAttachmentStatus">
               {uploadStatus || `${attachments.length} attachment${attachments.length === 1 ? "" : "s"} linked to this session`}

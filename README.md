@@ -105,11 +105,13 @@ Run the pipeline worker:
 python -m hound_forward.worker.main
 ```
 
-If you want to enable the real LLM-backed planner and chat orchestration, configure:
+If you want to enable the real LLM-backed planner and chat orchestration on GCP, configure:
 
 ```bash
-export OPENAI_API_KEY=...
-export HF_LLM_MODEL=gpt-4o-mini
+export HF_LLM_PROVIDER=vertex_ai
+export HF_GCP_PROJECT_ID=...
+export HF_GCP_LOCATION=australia-southeast2
+export HF_LLM_MODEL=gemini-2.5-flash
 export HF_PLANNER_MODE=hybrid
 ```
 
@@ -129,8 +131,8 @@ Frontend architecture notes live in:
 
 The repository now supports two cloud deployment shapes:
 
+- GCP with Cloud Run services, Pub/Sub push delivery, Cloud Storage, Cloud SQL, and Vertex AI Gemini
 - Azure with Container Apps and Service Bus
-- GCP with Cloud Run services and Pub/Sub push delivery
 
 The GCP path deploys:
 

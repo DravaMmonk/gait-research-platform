@@ -5,9 +5,11 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from hound_forward.agent_system.llm import OpenAIResponsesJSONClient
+from hound_forward.agent_system.llm import StructuredJSONClient
 
 logger = logging.getLogger(__name__)
+
+OpenAIResponsesJSONClient = StructuredJSONClient
 
 
 class _ReasonedText(BaseModel):
@@ -17,7 +19,7 @@ class _ReasonedText(BaseModel):
 class ChatReasoner:
     def __init__(self, model: str) -> None:
         self.model = model
-        self.client = OpenAIResponsesJSONClient(model=model)
+        self.client = StructuredJSONClient(model=model)
 
     def answer_question(
         self,
