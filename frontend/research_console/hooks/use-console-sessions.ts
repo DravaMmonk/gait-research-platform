@@ -6,8 +6,6 @@ import { createConsoleSession, fetchConsoleSessions } from "@/lib/console-sessio
 import { readActiveSessionId, readArchivedSessionIds, resetCopilotInspectorState, writeActiveSessionId, writeArchivedSessionIds } from "@/lib/console-session-storage";
 import {
   ConsoleSession,
-  getSessionDescriptor,
-  getSessionStatusTone,
   sortSessionsByMostRecent,
 } from "@/lib/console-session-utils";
 
@@ -171,8 +169,6 @@ export function useConsoleSessions() {
     activeSession,
     archivedSessions,
     isBusy,
-    sessionDescriptor: getSessionDescriptor(activeSession),
-    sessionStatusTone: getSessionStatusTone(isBusy, threadId),
     status,
     threadId,
     visibleSessions,

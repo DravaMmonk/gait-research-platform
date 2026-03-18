@@ -14,9 +14,6 @@ export function CopilotAgentConsole() {
     archivedSessions,
     createSession,
     isBusy,
-    sessionDescriptor,
-    sessionStatusTone,
-    status,
     threadId,
     visibleSessions,
     archiveSession,
@@ -49,9 +46,6 @@ export function CopilotAgentConsole() {
         />
         <ConsoleChatFrame
           activeSession={activeSession}
-          sessionDescriptor={sessionDescriptor}
-          sessionStatusTone={sessionStatusTone}
-          status={status}
           threadId={threadId}
         />
       </section>
