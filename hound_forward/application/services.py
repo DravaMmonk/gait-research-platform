@@ -65,6 +65,7 @@ from hound_forward.domain import (
     VideoPanelPayload,
 )
 from hound_forward.ports import ArtifactStore, Job, JobQueue, MetadataRepository, RunExecutor, ToolRunner
+from hound_forward.settings import PlatformSettings
 
 
 def utc_now() -> datetime:
