@@ -1,5 +1,4 @@
 import "./globals.css";
-import "@copilotkit/react-ui/styles.css";
 import { ReactNode } from "react";
 import { Inter, JetBrains_Mono } from "next/font/google";
 

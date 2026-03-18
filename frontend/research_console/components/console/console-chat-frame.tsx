@@ -2,7 +2,7 @@
 
 import { Panel } from "@/components/ui/panel";
 import { type ConsoleSession } from "@/lib/console-session-utils";
-import { CopilotSessionChat } from "./copilot-session-chat";
+import { SessionChat } from "./session-chat";
 
 type ConsoleChatFrameProps = {
   activeSession: ConsoleSession | null;
@@ -18,7 +18,7 @@ export function ConsoleChatFrame({
       <Panel tone="elevated" padding="none" className="grid h-full min-h-0 overflow-hidden rounded-[1.4rem]">
         {threadId ? (
           <div className="min-h-0 overflow-hidden">
-            <CopilotSessionChat threadId={threadId} />
+            <SessionChat threadId={threadId} />
           </div>
         ) : (
           <div className="grid min-h-0 place-items-center px-6 py-16">

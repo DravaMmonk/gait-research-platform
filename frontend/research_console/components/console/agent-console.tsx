@@ -6,7 +6,7 @@ import { ConsoleChatFrame } from "@/components/console/console-chat-frame";
 import { ConsoleSidebar } from "@/components/console/console-sidebar";
 import { useConsoleSessions } from "@/hooks/use-console-sessions";
 
-export function CopilotAgentConsole() {
+export function AgentConsole() {
   const [isArchivedExpanded, setIsArchivedExpanded] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const {

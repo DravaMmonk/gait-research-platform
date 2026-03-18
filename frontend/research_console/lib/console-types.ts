@@ -1,4 +1,24 @@
+import type { UIMessage } from "ai";
+
 export type ConsoleViewMode = "summary" | "chart" | "table" | "evidence" | "video" | "formula";
+
+export type ChatResponsePayload = {
+  type: "text" | "run" | "error";
+  message: string;
+  run_id?: string;
+  progress_messages?: string[];
+  structured_data?: Record<string, unknown>;
+};
+
+export type ConsoleUIMessage = UIMessage<
+  never,
+  {
+    progress: {
+      message: string;
+    };
+    result: ChatResponsePayload;
+  }
+>;
 
 export type SummaryCardModule = {
   type: "summary_card";

@@ -127,8 +127,8 @@ export function SessionAttachmentInput({
   const canSend = chatReady && !inProgress && (text.trim().length > 0 || pendingAttachmentIds.length > 0);
 
   return (
-    <div className="copilotKitInputContainer">
-      <div className="copilotKitInput" onClick={(event) => {
+    <div className="sessionChatInputContainer">
+      <div className="sessionChatInput" onClick={(event) => {
         const target = event.target as HTMLElement;
         if (!target.closest("button")) {
           textareaRef.current?.focus();
@@ -170,7 +170,7 @@ export function SessionAttachmentInput({
           <div className="sessionAttachmentMeta">
             <button
               type="button"
-              className="copilotKitInputControlButton sessionAttachmentButton"
+              className="sessionChatIconButton sessionAttachmentButton"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading || !threadId}
               aria-label="Attach files"
@@ -185,7 +185,7 @@ export function SessionAttachmentInput({
 
           <button
             type="button"
-            className="copilotKitInputControlButton sessionSendButton"
+            className="sessionChatIconButton sessionSendButton"
             onClick={canStop ? onStop : () => void handleSend()}
             disabled={!canStop && !canSend}
             aria-label={canStop ? "Stop" : "Send"}

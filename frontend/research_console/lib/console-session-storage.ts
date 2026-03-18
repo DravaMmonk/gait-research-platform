@@ -34,8 +34,3 @@ export function readArchivedSessionIds(): string[] {
 export function writeArchivedSessionIds(sessionIds: string[]) {
   window.localStorage.setItem(ARCHIVED_SESSION_STORAGE_KEY, JSON.stringify(sessionIds));
 }
-
-export function resetCopilotInspectorState() {
-  window.localStorage.removeItem("cpk:inspector:hidden");
-  window.localStorage.removeItem("cpk:inspector:state");
-}

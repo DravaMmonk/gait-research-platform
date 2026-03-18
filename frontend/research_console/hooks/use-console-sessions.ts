@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createConsoleSession, fetchConsoleSessions } from "@/lib/console-session-client";
-import { readActiveSessionId, readArchivedSessionIds, resetCopilotInspectorState, writeActiveSessionId, writeArchivedSessionIds } from "@/lib/console-session-storage";
+import { readActiveSessionId, readArchivedSessionIds, writeActiveSessionId, writeArchivedSessionIds } from "@/lib/console-session-storage";
 import {
   ConsoleSession,
   sortSessionsByMostRecent,
@@ -104,10 +104,6 @@ export function useConsoleSessions() {
     writeArchivedSessionIds(nextArchivedSessionIds);
     setStatus(restoredSession ? `Restored ${restoredSession.title}` : "Restored session");
   }
-
-  useEffect(() => {
-    resetCopilotInspectorState();
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
