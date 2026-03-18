@@ -8,6 +8,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY hound_forward ./hound_forward
+COPY db ./db
 
 CMD ["python", "-m", "hound_forward.worker.main"]

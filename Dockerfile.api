@@ -8,6 +8,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY hound_forward ./hound_forward
+COPY db ./db
 
 CMD ["uvicorn", "hound_forward.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
