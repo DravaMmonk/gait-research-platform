@@ -25,9 +25,13 @@ export function CopilotAgentConsole() {
   } = useConsoleSessions();
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.08),transparent_24rem),linear-gradient(180deg,hsl(40_22%_98%)_0%,hsl(42_22%_95%)_48%,hsl(40_14%_92%)_100%)]">
+    <main className="relative h-dvh min-h-dvh max-h-dvh overflow-hidden bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.08),transparent_24rem),linear-gradient(180deg,hsl(40_22%_98%)_0%,hsl(42_22%_95%)_48%,hsl(40_14%_92%)_100%)]">
       <section
-        className={isSidebarCollapsed ? "grid min-h-screen grid-cols-[4.75rem_minmax(0,1fr)]" : "grid min-h-screen grid-cols-[22rem_minmax(0,1fr)]"}
+        className={
+          isSidebarCollapsed
+            ? "grid h-dvh min-h-dvh max-h-dvh grid-cols-[4.75rem_minmax(0,1fr)] overflow-hidden"
+            : "grid h-dvh min-h-dvh max-h-dvh grid-cols-[22rem_minmax(0,1fr)] overflow-hidden"
+        }
       >
         <ConsoleSidebar
           activeSessionId={threadId}

@@ -30,8 +30,8 @@ export function ConsoleChatFrame({
   threadId,
 }: ConsoleChatFrameProps) {
   return (
-    <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-5 px-4 py-4 sm:px-6 sm:py-6">
-      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <section className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-5 overflow-hidden px-4 py-4 sm:px-6 sm:py-6">
+      <header className="flex shrink-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">CopilotKit chat</p>
           <h1 className="mt-1 text-[clamp(1.75rem,1.45rem+1vw,2.35rem)] font-bold tracking-[-0.04em] text-foreground">
@@ -44,8 +44,8 @@ export function ConsoleChatFrame({
         </Badge>
       </header>
 
-      <Panel tone="elevated" padding="none" className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[1.4rem]">
-        <div className="grid border-b border-[hsl(var(--border)/0.68)] bg-[hsl(var(--secondary)/0.44)] md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_1.3fr]">
+      <Panel tone="elevated" padding="none" className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[1.4rem]">
+        <div className="grid shrink-0 border-b border-[hsl(var(--border)/0.68)] bg-[hsl(var(--secondary)/0.44)] md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_1.3fr]">
           <ContextItem label="Session" value={threadId ? `${threadId.slice(0, 8)}...` : "Initializing"} />
           <ContextItem
             label="Created"
@@ -55,7 +55,7 @@ export function ConsoleChatFrame({
         </div>
 
         {threadId ? (
-          <div className="min-h-0">
+          <div className="min-h-0 overflow-hidden">
             <CopilotSessionChat threadId={threadId} />
           </div>
         ) : (

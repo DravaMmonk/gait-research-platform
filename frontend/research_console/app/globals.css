@@ -144,12 +144,14 @@
 }
 
 .research-chat .copilotKitMessagesFooter {
+  flex-shrink: 0;
   width: min(100%, 58rem);
   margin: 0 auto;
   padding: 0 1.5rem 1.5rem;
 }
 
 .research-chat .copilotKitInputContainer {
+  flex-shrink: 0;
   background: transparent;
   padding: 0;
 }
