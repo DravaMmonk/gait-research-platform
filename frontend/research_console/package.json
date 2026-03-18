@@ -2,8 +2,11 @@
   "name": "research-console",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.11 <25"
+  },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint ."

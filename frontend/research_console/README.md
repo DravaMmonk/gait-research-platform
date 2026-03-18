@@ -48,3 +48,9 @@ The Research Console is intentionally decomposed:
 - Reuse `Panel`, `Badge`, `Button`, `Input`, `Select`, and `ScrollArea` before introducing new abstractions.
 - Preserve width-safe rendering for all long-form content, IDs, code, formulas, and JSON payloads.
 - Keep `/dev` visually aligned with `/` and avoid preview-only styling forks.
+
+## Runtime Notes
+
+- Use `npm run dev` as the canonical local frontend command.
+- The repository intentionally runs `next dev --webpack` for local development to avoid Turbopack-specific instability in this app.
+- Use an LTS Node release for frontend work. The supported range is declared in [`package.json`](/Users/drava/Documents/Hound/hf-playground/frontend/research_console/package.json).
