@@ -119,7 +119,13 @@
   height: 100%;
   min-height: 0;
   flex-direction: column;
-  background: transparent;
+  background-color: hsl(var(--card));
+  background-image:
+    linear-gradient(hsl(var(--card) / 0.9), hsl(var(--card) / 0.9)),
+    url("/hound-pattern.png");
+  background-position: center, center;
+  background-repeat: no-repeat, repeat;
+  background-size: auto, 240px;
   color: hsl(var(--foreground));
   overflow: hidden;
 }
@@ -180,6 +186,89 @@
   color: hsl(var(--foreground));
   font-size: 0.95rem;
   line-height: 1.6;
+}
+
+.research-chat .sessionAttachmentTray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+}
+
+.research-chat .sessionAttachmentChip,
+.research-chat .sessionAttachmentCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  border: 1px solid hsl(var(--border) / 0.95);
+  border-radius: 999px;
+  background: hsl(var(--secondary));
+  padding: 0.3rem 0.65rem;
+  font-size: 0.76rem;
+  color: hsl(var(--foreground));
+}
+
+.research-chat .sessionAttachmentChip span {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.research-chat .sessionAttachmentTextarea {
+  width: 100%;
+  min-height: 3.2rem;
+  resize: none;
+  border: 0;
+  background: transparent;
+  color: hsl(var(--foreground));
+  font-size: 0.95rem;
+  line-height: 1.6;
+  outline: none;
+}
+
+.research-chat .sessionAttachmentTextarea::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.research-chat .sessionAttachmentFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.research-chat .sessionAttachmentMeta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.research-chat .sessionAttachmentButton {
+  width: auto;
+  min-width: 2.5rem;
+  padding: 0 0.85rem;
+  gap: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--secondary));
+  font-size: 0.84rem;
+}
+
+.research-chat .sessionAttachmentStatus {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.research-chat .sessionSendButton {
+  flex-shrink: 0;
 }
 
 .research-chat .copilotKitInput > textarea::placeholder {
@@ -307,5 +396,21 @@
 
   .research-chat .copilotKitMessage {
     max-width: 100%;
+  }
+
+  .research-chat .sessionAttachmentFooter {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .research-chat .sessionAttachmentMeta {
+    width: 100%;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .research-chat .sessionAttachmentStatus {
+    white-space: normal;
   }
 }

@@ -6,6 +6,10 @@ __pycache__/
 *.egg-info/
 .env
 .hf/
+infra/azure/parameters.dev.json
+infra/azure/parameters.*.json
+!infra/azure/parameters.dev.example.json
+infra/azure/outputs*.json
 frontend/research_console/node_modules/
 frontend/research_console/.next/
 frontend/research_console/.next-pre16-cache-*/

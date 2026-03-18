@@ -1,0 +1,931 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "6428459622710995064"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for Hound Forward resources."
+      }
+    },
+    "environmentName": {
+      "type": "string",
+      "defaultValue": "dev",
+      "metadata": {
+        "description": "Deployment environment name."
+      }
+    },
+    "storageAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage account name."
+      }
+    },
+    "storageContainerName": {
+      "type": "string",
+      "defaultValue": "hound-platform",
+      "metadata": {
+        "description": "Primary blob container used by the application."
+      }
+    },
+    "postgresServerName": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure PostgreSQL server name."
+      }
+    },
+    "postgresDatabaseName": {
+      "type": "string",
+      "defaultValue": "houndforward",
+      "metadata": {
+        "description": "Application database name."
+      }
+    },
+    "postgresAdminLogin": {
+      "type": "string",
+      "metadata": {
+        "description": "PostgreSQL administrator login."
+      }
+    },
+    "postgresAdminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "PostgreSQL administrator password."
+      }
+    },
+    "serviceBusNamespaceName": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure Service Bus namespace name."
+      }
+    },
+    "containerAppsEnvironmentName": {
+      "type": "string",
+      "metadata": {
+        "description": "Container Apps environment name."
+      }
+    },
+    "apiAppName": {
+      "type": "string",
+      "defaultValue": "hound-api",
+      "metadata": {
+        "description": "API container app name."
+      }
+    },
+    "agentAppName": {
+      "type": "string",
+      "defaultValue": "hound-agent",
+      "metadata": {
+        "description": "Agent container app name."
+      }
+    },
+    "workerJobName": {
+      "type": "string",
+      "defaultValue": "hound-worker",
+      "metadata": {
+        "description": "Worker job name."
+      }
+    },
+    "apiImage": {
+      "type": "string",
+      "defaultValue": "ghcr.io/example/hound-api:latest",
+      "metadata": {
+        "description": "API container image."
+      }
+    },
+    "agentImage": {
+      "type": "string",
+      "defaultValue": "ghcr.io/example/hound-agent:latest",
+      "metadata": {
+        "description": "Agent container image."
+      }
+    },
+    "workerImage": {
+      "type": "string",
+      "defaultValue": "ghcr.io/example/hound-worker:latest",
+      "metadata": {
+        "description": "Worker container image."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "storage",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "storageAccountName": {
+            "value": "[parameters('storageAccountName')]"
+          },
+          "storageContainerName": {
+            "value": "[parameters('storageContainerName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "17076915515275603868"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for Hound Forward resources."
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account name."
+              }
+            },
+            "storageContainerName": {
+              "type": "string",
+              "metadata": {
+                "description": "Primary blob container used by the application."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-05-01",
+              "name": "[parameters('storageAccountName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "properties": {
+                "allowBlobPublicAccess": false,
+                "minimumTlsVersion": "TLS1_2",
+                "supportsHttpsTrafficOnly": true
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', parameters('storageContainerName'))]",
+              "properties": {
+                "publicAccess": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccountName'), 'default')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "storageAccountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+            },
+            "storageAccountName": {
+              "type": "string",
+              "value": "[parameters('storageAccountName')]"
+            },
+            "blobEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-05-01').primaryEndpoints.blob]"
+            },
+            "containerName": {
+              "type": "string",
+              "value": "[parameters('storageContainerName')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "postgres",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "postgresServerName": {
+            "value": "[parameters('postgresServerName')]"
+          },
+          "postgresDatabaseName": {
+            "value": "[parameters('postgresDatabaseName')]"
+          },
+          "postgresAdminLogin": {
+            "value": "[parameters('postgresAdminLogin')]"
+          },
+          "postgresAdminPassword": {
+            "value": "[parameters('postgresAdminPassword')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "18056319804129465187"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for Hound Forward resources."
+              }
+            },
+            "postgresServerName": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure PostgreSQL server name."
+              }
+            },
+            "postgresDatabaseName": {
+              "type": "string",
+              "metadata": {
+                "description": "Application database name."
+              }
+            },
+            "postgresAdminLogin": {
+              "type": "string",
+              "metadata": {
+                "description": "PostgreSQL administrator login."
+              }
+            },
+            "postgresAdminPassword": {
+              "type": "securestring",
+              "metadata": {
+                "description": "PostgreSQL administrator password."
+              }
+            }
+          },
+          "variables": {
+            "postgresFqdn": "[format('{0}.postgres.database.azure.com', parameters('postgresServerName'))]",
+            "metadataDatabaseUrl": "[format('postgresql+psycopg://{0}:{1}@{2}:5432/{3}?sslmode=require', parameters('postgresAdminLogin'), parameters('postgresAdminPassword'), variables('postgresFqdn'), parameters('postgresDatabaseName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+              "apiVersion": "2023-12-01-preview",
+              "name": "[parameters('postgresServerName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard_B2s",
+                "tier": "Burstable"
+              },
+              "properties": {
+                "version": "16",
+                "administratorLogin": "[parameters('postgresAdminLogin')]",
+                "administratorLoginPassword": "[parameters('postgresAdminPassword')]",
+                "authConfig": {
+                  "activeDirectoryAuth": "Enabled",
+                  "passwordAuth": "Enabled"
+                },
+                "backup": {
+                  "backupRetentionDays": 7,
+                  "geoRedundantBackup": "Disabled"
+                },
+                "network": {
+                  "publicNetworkAccess": "Enabled"
+                },
+                "storage": {
+                  "storageSizeGB": 32
+                }
+              }
+            },
+            {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+              "apiVersion": "2023-12-01-preview",
+              "name": "[format('{0}/{1}', parameters('postgresServerName'), parameters('postgresDatabaseName'))]",
+              "properties": {
+                "charset": "UTF8",
+                "collation": "en_US.utf8"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('postgresServerName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "postgresServerId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('postgresServerName'))]"
+            },
+            "postgresServerName": {
+              "type": "string",
+              "value": "[parameters('postgresServerName')]"
+            },
+            "postgresFqdn": {
+              "type": "string",
+              "value": "[variables('postgresFqdn')]"
+            },
+            "postgresDatabase": {
+              "type": "string",
+              "value": "[parameters('postgresDatabaseName')]"
+            },
+            "postgresAdminLogin": {
+              "type": "string",
+              "value": "[parameters('postgresAdminLogin')]"
+            },
+            "metadataDatabaseUrl": {
+              "type": "string",
+              "value": "[variables('metadataDatabaseUrl')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "servicebus",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "serviceBusNamespaceName": {
+            "value": "[parameters('serviceBusNamespaceName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "10743106806543996988"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for Hound Forward resources."
+              }
+            },
+            "serviceBusNamespaceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure Service Bus namespace name."
+              }
+            },
+            "queueName": {
+              "type": "string",
+              "defaultValue": "runs",
+              "metadata": {
+                "description": "Queue name for runs."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ServiceBus/namespaces",
+              "apiVersion": "2024-01-01",
+              "name": "[parameters('serviceBusNamespaceName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard",
+                "tier": "Standard"
+              }
+            },
+            {
+              "type": "Microsoft.ServiceBus/namespaces/queues",
+              "apiVersion": "2024-01-01",
+              "name": "[format('{0}/{1}', parameters('serviceBusNamespaceName'), parameters('queueName'))]",
+              "properties": {
+                "deadLetteringOnMessageExpiration": true,
+                "maxDeliveryCount": 5
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ServiceBus/namespaces', parameters('serviceBusNamespaceName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "serviceBusNamespaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ServiceBus/namespaces', parameters('serviceBusNamespaceName'))]"
+            },
+            "serviceBusNamespaceName": {
+              "type": "string",
+              "value": "[parameters('serviceBusNamespaceName')]"
+            },
+            "queueName": {
+              "type": "string",
+              "value": "[parameters('queueName')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "containerapps",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "containerAppsEnvironmentName": {
+            "value": "[parameters('containerAppsEnvironmentName')]"
+          },
+          "apiAppName": {
+            "value": "[parameters('apiAppName')]"
+          },
+          "agentAppName": {
+            "value": "[parameters('agentAppName')]"
+          },
+          "workerJobName": {
+            "value": "[parameters('workerJobName')]"
+          },
+          "apiImage": {
+            "value": "[parameters('apiImage')]"
+          },
+          "agentImage": {
+            "value": "[parameters('agentImage')]"
+          },
+          "workerImage": {
+            "value": "[parameters('workerImage')]"
+          },
+          "blobAccountUrl": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.blobEndpoint.value]"
+          },
+          "blobContainerName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.containerName.value]"
+          },
+          "serviceBusNamespaceName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'servicebus'), '2025-04-01').outputs.serviceBusNamespaceName.value]"
+          },
+          "serviceBusQueueName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'servicebus'), '2025-04-01').outputs.queueName.value]"
+          },
+          "metadataDatabaseUrl": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'postgres'), '2025-04-01').outputs.metadataDatabaseUrl.value]"
+          },
+          "storageAccountResourceId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "13061950576697450390"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for Hound Forward resources."
+              }
+            },
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Deployment environment name."
+              }
+            },
+            "containerAppsEnvironmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Container Apps environment name."
+              }
+            },
+            "apiAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "API container app name."
+              }
+            },
+            "agentAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Agent container app name."
+              }
+            },
+            "workerJobName": {
+              "type": "string",
+              "metadata": {
+                "description": "Worker job name."
+              }
+            },
+            "apiImage": {
+              "type": "string",
+              "metadata": {
+                "description": "API container image."
+              }
+            },
+            "agentImage": {
+              "type": "string",
+              "metadata": {
+                "description": "Agent container image."
+              }
+            },
+            "workerImage": {
+              "type": "string",
+              "metadata": {
+                "description": "Worker container image."
+              }
+            },
+            "blobAccountUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "Blob endpoint exposed to the application."
+              }
+            },
+            "blobContainerName": {
+              "type": "string",
+              "metadata": {
+                "description": "Blob container exposed to the application."
+              }
+            },
+            "serviceBusNamespaceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Service Bus namespace exposed to the application."
+              }
+            },
+            "serviceBusQueueName": {
+              "type": "string",
+              "metadata": {
+                "description": "Service Bus queue exposed to the application."
+              }
+            },
+            "metadataDatabaseUrl": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Metadata database URL secret value."
+              }
+            },
+            "storageAccountResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account resource id for RBAC."
+              }
+            }
+          },
+          "variables": {
+            "blobDataContributorRoleId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+            "metadataDatabaseSecretName": "hf-metadata-database-url"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2023-09-01",
+              "name": "[format('hound-{0}-logs', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "retentionInDays": 30
+              }
+            },
+            {
+              "type": "Microsoft.App/managedEnvironments",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('containerAppsEnvironmentName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "appLogsConfiguration": {
+                  "destination": "log-analytics",
+                  "logAnalyticsConfiguration": {
+                    "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', format('hound-{0}-logs', parameters('environmentName'))), '2023-09-01').customerId]",
+                    "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('hound-{0}-logs', parameters('environmentName'))), '2023-09-01').primarySharedKey]"
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('hound-{0}-logs', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('apiAppName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]",
+                "configuration": {
+                  "ingress": {
+                    "external": true,
+                    "targetPort": 8000
+                  },
+                  "secrets": [
+                    {
+                      "name": "[variables('metadataDatabaseSecretName')]",
+                      "value": "[parameters('metadataDatabaseUrl')]"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "api",
+                      "image": "[parameters('apiImage')]",
+                      "env": [
+                        {
+                          "name": "HF_METADATA_DATABASE_URL",
+                          "secretRef": "[variables('metadataDatabaseSecretName')]"
+                        },
+                        {
+                          "name": "HF_AZURE_BLOB_ACCOUNT_URL",
+                          "value": "[parameters('blobAccountUrl')]"
+                        },
+                        {
+                          "name": "HF_AZURE_BLOB_CONTAINER",
+                          "value": "[parameters('blobContainerName')]"
+                        },
+                        {
+                          "name": "HF_AZURE_SERVICE_BUS_NAMESPACE",
+                          "value": "[parameters('serviceBusNamespaceName')]"
+                        },
+                        {
+                          "name": "HF_AZURE_SERVICE_BUS_QUEUE",
+                          "value": "[parameters('serviceBusQueueName')]"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('agentAppName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]",
+                "configuration": {
+                  "secrets": [
+                    {
+                      "name": "[variables('metadataDatabaseSecretName')]",
+                      "value": "[parameters('metadataDatabaseUrl')]"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "agent",
+                      "image": "[parameters('agentImage')]",
+                      "env": [
+                        {
+                          "name": "HF_METADATA_DATABASE_URL",
+                          "secretRef": "[variables('metadataDatabaseSecretName')]"
+                        },
+                        {
+                          "name": "HF_AZURE_BLOB_ACCOUNT_URL",
+                          "value": "[parameters('blobAccountUrl')]"
+                        },
+                        {
+                          "name": "HF_AZURE_BLOB_CONTAINER",
+                          "value": "[parameters('blobContainerName')]"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.App/jobs",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('workerJobName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "environmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]",
+                "configuration": {
+                  "triggerType": "Manual",
+                  "replicaRetryLimit": 2,
+                  "replicaTimeout": 3600,
+                  "secrets": [
+                    {
+                      "name": "[variables('metadataDatabaseSecretName')]",
+                      "value": "[parameters('metadataDatabaseUrl')]"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "worker",
+                      "image": "[parameters('workerImage')]",
+                      "env": [
+                        {
+                          "name": "HF_METADATA_DATABASE_URL",
+                          "secretRef": "[variables('metadataDatabaseSecretName')]"
+                        },
+                        {
+                          "name": "HF_AZURE_BLOB_ACCOUNT_URL",
+                          "value": "[parameters('blobAccountUrl')]"
+                        },
+                        {
+                          "name": "HF_AZURE_BLOB_CONTAINER",
+                          "value": "[parameters('blobContainerName')]"
+                        },
+                        {
+                          "name": "HF_AZURE_SERVICE_BUS_NAMESPACE",
+                          "value": "[parameters('serviceBusNamespaceName')]"
+                        },
+                        {
+                          "name": "HF_AZURE_SERVICE_BUS_QUEUE",
+                          "value": "[parameters('serviceBusQueueName')]"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', last(split(parameters('storageAccountResourceId'), '/')))]",
+              "name": "[guid(parameters('storageAccountResourceId'), parameters('apiAppName'), variables('blobDataContributorRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('blobDataContributorRoleId')]",
+                "principalId": "[reference(resourceId('Microsoft.App/containerApps', parameters('apiAppName')), '2024-03-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/containerApps', parameters('apiAppName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', last(split(parameters('storageAccountResourceId'), '/')))]",
+              "name": "[guid(parameters('storageAccountResourceId'), parameters('agentAppName'), variables('blobDataContributorRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('blobDataContributorRoleId')]",
+                "principalId": "[reference(resourceId('Microsoft.App/containerApps', parameters('agentAppName')), '2024-03-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/containerApps', parameters('agentAppName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', last(split(parameters('storageAccountResourceId'), '/')))]",
+              "name": "[guid(parameters('storageAccountResourceId'), parameters('workerJobName'), variables('blobDataContributorRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('blobDataContributorRoleId')]",
+                "principalId": "[reference(resourceId('Microsoft.App/jobs', parameters('workerJobName')), '2024-03-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/jobs', parameters('workerJobName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "logAnalyticsWorkspaceName": {
+              "type": "string",
+              "value": "[format('hound-{0}-logs', parameters('environmentName'))]"
+            },
+            "containerAppsEnvironmentId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]"
+            },
+            "metadataDatabaseUrlSecretName": {
+              "type": "string",
+              "value": "[variables('metadataDatabaseSecretName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'postgres')]",
+        "[resourceId('Microsoft.Resources/deployments', 'servicebus')]",
+        "[resourceId('Microsoft.Resources/deployments', 'storage')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "infraContract": {
+      "type": "object",
+      "value": {
+        "blob": {
+          "account_url": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.blobEndpoint.value]",
+          "container": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.containerName.value]"
+        },
+        "postgres": {
+          "host": "[reference(resourceId('Microsoft.Resources/deployments', 'postgres'), '2025-04-01').outputs.postgresFqdn.value]",
+          "database": "[reference(resourceId('Microsoft.Resources/deployments', 'postgres'), '2025-04-01').outputs.postgresDatabase.value]",
+          "user": "[reference(resourceId('Microsoft.Resources/deployments', 'postgres'), '2025-04-01').outputs.postgresAdminLogin.value]",
+          "metadata_database_url_secret_name": "[reference(resourceId('Microsoft.Resources/deployments', 'containerapps'), '2025-04-01').outputs.metadataDatabaseUrlSecretName.value]"
+        },
+        "service_bus": {
+          "namespace": "[reference(resourceId('Microsoft.Resources/deployments', 'servicebus'), '2025-04-01').outputs.serviceBusNamespaceName.value]",
+          "queue": "[reference(resourceId('Microsoft.Resources/deployments', 'servicebus'), '2025-04-01').outputs.queueName.value]"
+        }
+      }
+    },
+    "storageAccountId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountId.value]"
+    },
+    "storageBlobEndpoint": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.blobEndpoint.value]"
+    },
+    "storageContainer": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.containerName.value]"
+    },
+    "postgresServerId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'postgres'), '2025-04-01').outputs.postgresServerId.value]"
+    },
+    "postgresServerFqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'postgres'), '2025-04-01').outputs.postgresFqdn.value]"
+    },
+    "postgresDatabase": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'postgres'), '2025-04-01').outputs.postgresDatabase.value]"
+    },
+    "metadataDatabaseUrlSecretName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'containerapps'), '2025-04-01').outputs.metadataDatabaseUrlSecretName.value]"
+    },
+    "serviceBusNamespaceId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'servicebus'), '2025-04-01').outputs.serviceBusNamespaceId.value]"
+    },
+    "containerAppsEnvironmentId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'containerapps'), '2025-04-01').outputs.containerAppsEnvironmentId.value]"
+    }
+  }
+}

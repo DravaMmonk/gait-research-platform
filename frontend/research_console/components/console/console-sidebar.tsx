@@ -188,7 +188,7 @@ export function ConsoleSidebar({
   return (
     <aside
       className={cn(
-        "min-h-0 border-r border-[hsl(var(--border)/0.74)] bg-[linear-gradient(180deg,hsl(42_24%_97%)_0%,hsl(40_18%_95%)_100%)]",
+        "h-full min-h-0 overflow-hidden border-r border-[hsl(var(--border)/0.74)] bg-[linear-gradient(180deg,hsl(42_24%_97%)_0%,hsl(40_18%_95%)_100%)]",
         isCollapsed ? "grid grid-rows-[auto_minmax(0,1fr)]" : "grid grid-rows-[auto_auto_auto_minmax(0,1fr)_auto]",
       )}
       aria-label="Research sessions"
@@ -219,14 +219,6 @@ export function ConsoleSidebar({
         />
       ) : (
         <>
-          <div className="space-y-2 border-b border-[hsl(var(--border)/0.68)] px-5 py-5">
-            <p className="text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Workspace</p>
-            <h2 className="text-lg font-semibold tracking-[-0.03em] text-foreground">Session-aware analysis</h2>
-            <p className="text-sm leading-6 text-muted-foreground">
-              The left rail manages sessions. The right panel keeps the CopilotKit chat surface focused on one thread.
-            </p>
-          </div>
-
           <div className="px-5 py-5">
             <Button type="button" className="w-full justify-center rounded-[0.95rem]" onClick={onCreateSession} disabled={isBusy}>
               <Plus />
@@ -250,7 +242,7 @@ export function ConsoleSidebar({
             />
           </div>
 
-          <div className="border-t border-[hsl(var(--border)/0.68)] px-5 py-4">
+          <div className="mt-auto border-t border-[hsl(var(--border)/0.68)] px-5 py-4">
             <Button
               type="button"
               variant="outline"
