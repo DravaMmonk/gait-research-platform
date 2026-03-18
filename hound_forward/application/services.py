@@ -296,14 +296,20 @@ class ResearchPlatformService:
     def process_next_job(self) -> RunRecord | None:
         job = self.container.run_queue.dequeue()
         if job is not None:
-            run = self._require_run(job.run_id)
-            run_job = self.get_job(job.job_id)
-        else:
-            run = self._find_next_queued_run()
-            if run is None:
-                return None
-            queued_jobs = self.list_jobs(run_id=run.run_id, job_type=JobType.RUN_EXECUTION)
-            run_job = queued_jobs[0] if queued_jobs else None
+            return self.process_run_job(job)
+        run = self._find_next_queued_run()
+        if run is None:
+            return None
+        queued_jobs = self.list_jobs(run_id=run.run_id, job_type=JobType.RUN_EXECUTION)
+        run_job = queued_jobs[0] if queued_jobs else None
+        return self._execute_run_job(run=run, run_job=run_job)
+
+    def process_run_job(self, job: Job) -> RunRecord:
+        run = self._require_run(job.run_id)
+        run_job = self.get_job(job.job_id)
+        return self._execute_run_job(run=run, run_job=run_job)
+
+    def _execute_run_job(self, *, run: RunRecord, run_job: JobRecord | None) -> RunRecord:
         run.status = RunStatus.RUNNING
         run.updated_at = utc_now()
         self.container.metadata.update_run(run)

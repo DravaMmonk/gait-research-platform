@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass
 
 from hound_forward.application import ResearchPlatformService
+from hound_forward.ports import Job
 from hound_forward.domain import RunRecord, RunStatus
 
 
@@ -48,6 +49,9 @@ class QueueWorkerRuntime:
 
     def run_once(self) -> RunRecord | None:
         return self.service.process_next_job()
+
+    def run_job(self, job: Job) -> RunRecord:
+        return self.service.process_run_job(job)
 
     def run_until_idle(
         self,

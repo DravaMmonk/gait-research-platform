@@ -1,3 +1,3 @@
-from .azure_postgres import AzurePostgresMetadataRepository
+from .sqlalchemy import SqlAlchemyMetadataRepository
 
-__all__ = ["AzurePostgresMetadataRepository"]
+__all__ = ["SqlAlchemyMetadataRepository"]

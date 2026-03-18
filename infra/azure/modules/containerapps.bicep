@@ -140,6 +140,10 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: 'azure'
             }
             {
+              name: 'HF_ARTIFACT_BACKEND'
+              value: 'azure_blob'
+            }
+            {
               name: 'HF_QUEUE_BACKEND'
               value: 'azure_service_bus'
             }
@@ -158,10 +162,6 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'HF_AZURE_SERVICE_BUS_NAMESPACE'
               value: serviceBusNamespaceName
-            }
-            {
-              name: 'HF_AZURE_SERVICE_BUS_QUEUE'
-              value: serviceBusRunQueueName
             }
             {
               name: 'HF_AZURE_SERVICE_BUS_RUN_QUEUE'
@@ -213,6 +213,10 @@ resource agentApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'HF_ENVIRONMENT'
               value: 'azure'
+            }
+            {
+              name: 'HF_ARTIFACT_BACKEND'
+              value: 'azure_blob'
             }
             {
               name: 'HF_QUEUE_BACKEND'
@@ -294,6 +298,10 @@ resource workerJob 'Microsoft.App/jobs@2024-03-01' = {
               value: 'azure'
             }
             {
+              name: 'HF_ARTIFACT_BACKEND'
+              value: 'azure_blob'
+            }
+            {
               name: 'HF_QUEUE_BACKEND'
               value: 'azure_service_bus'
             }
@@ -312,10 +320,6 @@ resource workerJob 'Microsoft.App/jobs@2024-03-01' = {
             {
               name: 'HF_AZURE_SERVICE_BUS_NAMESPACE'
               value: serviceBusNamespaceName
-            }
-            {
-              name: 'HF_AZURE_SERVICE_BUS_QUEUE'
-              value: serviceBusRunQueueName
             }
             {
               name: 'HF_AZURE_SERVICE_BUS_RUN_QUEUE'

@@ -183,8 +183,8 @@ class FormulaReviewModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-class AzurePostgresMetadataRepository:
-    """Metadata repository aligned to Azure PostgreSQL schema semantics."""
+class SqlAlchemyMetadataRepository:
+    """Metadata repository backed by SQLAlchemy-compatible PostgreSQL or SQLite."""
 
     def __init__(self, database_url: str) -> None:
         engine_kwargs: dict[str, Any] = {"future": True}
@@ -258,37 +258,22 @@ class AzurePostgresMetadataRepository:
                     db.execute(
                         delete(FormulaReviewModel).where(FormulaReviewModel.formula_evaluation_id.in_(formula_evaluation_ids))
                     )
-                    db.execute(
-                        delete(FormulaEvaluationModel).where(FormulaEvaluationModel.formula_evaluation_id.in_(formula_evaluation_ids))
-                    )
+                db.execute(delete(FormulaEvaluationModel).where(FormulaEvaluationModel.run_id.in_(run_ids)))
                 db.execute(delete(FormulaProposalModel).where(FormulaProposalModel.source_run_id.in_(run_ids)))
                 db.execute(delete(MetricResultModel).where(MetricResultModel.run_id.in_(run_ids)))
                 db.execute(delete(RunEventModel).where(RunEventModel.run_id.in_(run_ids)))
+                db.execute(delete(JobModel).where(JobModel.run_id.in_(run_ids)))
                 db.execute(delete(AssetModel).where(AssetModel.run_id.in_(run_ids)))
                 db.execute(delete(RunModel).where(RunModel.run_id.in_(run_ids)))
 
+            db.execute(delete(JobModel).where(JobModel.session_id == session_id))
             db.execute(delete(AssetModel).where(AssetModel.session_id == session_id))
-            db.execute(delete(SessionModel).where(SessionModel.session_id == session_id))
+            db.delete(session_model)
         return True
 
     def create_run(self, run: RunRecord) -> RunRecord:
         with self._session_factory.begin() as db:
-            db.add(
-                RunModel(
-                    run_id=run.run_id,
-                    session_id=run.session_id,
-                    run_kind=run.run_kind.value,
-                    status=run.status.value,
-                    manifest_json=run.manifest.model_dump(mode="json"),
-                    input_asset_ids_json=run.input_asset_ids,
-                    execution_plan_json=run.execution_plan.model_dump(mode="json") if run.execution_plan else None,
-                    stage_results_json=[item.model_dump(mode="json") for item in run.stage_results],
-                    summary_json=run.summary,
-                    error_json=run.error,
-                    created_at=run.created_at,
-                    updated_at=run.updated_at,
-                )
-            )
+            db.add(self._run_model(run))
         return run
 
     def update_run(self, run: RunRecord) -> RunRecord:
@@ -296,47 +281,24 @@ class AzurePostgresMetadataRepository:
             model = db.get(RunModel, run.run_id)
             if model is None:
                 raise KeyError(f"Unknown run_id: {run.run_id}")
-            model.status = run.status.value
-            model.summary_json = run.summary
-            model.error_json = run.error
-            model.updated_at = run.updated_at
-            model.manifest_json = run.manifest.model_dump(mode="json")
-            model.input_asset_ids_json = run.input_asset_ids
-            model.execution_plan_json = run.execution_plan.model_dump(mode="json") if run.execution_plan else None
-            model.stage_results_json = [item.model_dump(mode="json") for item in run.stage_results]
+            self._write_run_model(model, run)
         return run
 
     def get_run(self, run_id: str) -> RunRecord | None:
         with self._session_factory() as db:
             model = db.get(RunModel, run_id)
-            if model is None:
-                return None
-            return self._to_run_record(model)
+            return None if model is None else self._read_run_model(model)
 
     def list_runs(self, session_id: str | None = None) -> list[RunRecord]:
         with self._session_factory() as db:
             stmt = select(RunModel).order_by(RunModel.created_at.desc())
             if session_id is not None:
                 stmt = stmt.where(RunModel.session_id == session_id)
-            return [self._to_run_record(model) for model in db.scalars(stmt)]
+            return [self._read_run_model(model) for model in db.scalars(stmt)]
 
     def create_job(self, job: JobRecord) -> JobRecord:
         with self._session_factory.begin() as db:
-            db.add(
-                JobModel(
-                    job_id=job.job_id,
-                    job_type=job.job_type.value,
-                    status=job.status.value,
-                    session_id=job.session_id,
-                    run_id=job.run_id,
-                    payload_json=job.payload,
-                    metadata_json=job.metadata,
-                    result_json=job.result,
-                    error_json=job.error,
-                    created_at=job.created_at,
-                    updated_at=job.updated_at,
-                )
-            )
+            db.add(self._job_model(job))
         return job
 
     def update_job(self, job: JobRecord) -> JobRecord:
@@ -344,22 +306,13 @@ class AzurePostgresMetadataRepository:
             model = db.get(JobModel, job.job_id)
             if model is None:
                 raise KeyError(f"Unknown job_id: {job.job_id}")
-            model.status = job.status.value
-            model.session_id = job.session_id
-            model.run_id = job.run_id
-            model.payload_json = job.payload
-            model.metadata_json = job.metadata
-            model.result_json = job.result
-            model.error_json = job.error
-            model.updated_at = job.updated_at
+            self._write_job_model(model, job)
         return job
 
     def get_job(self, job_id: str) -> JobRecord | None:
         with self._session_factory() as db:
             model = db.get(JobModel, job_id)
-            if model is None:
-                return None
-            return self._to_job_record(model)
+            return None if model is None else self._read_job_model(model)
 
     def list_jobs(
         self,
@@ -376,7 +329,12 @@ class AzurePostgresMetadataRepository:
                 stmt = stmt.where(JobModel.run_id == run_id)
             if job_type is not None:
                 stmt = stmt.where(JobModel.job_type == job_type)
-            return [self._to_job_record(model) for model in db.scalars(stmt)]
+            return [self._read_job_model(model) for model in db.scalars(stmt)]
+
+    def get_asset(self, asset_id: str) -> AssetRecord | None:
+        with self._session_factory() as db:
+            model = db.get(AssetModel, asset_id)
+            return None if model is None else self._read_asset_model(model)
 
     def append_run_event(self, event: RunEvent) -> RunEvent:
         with self._session_factory.begin() as db:
@@ -391,13 +349,6 @@ class AzurePostgresMetadataRepository:
                 )
             )
         return event
-
-    def get_asset(self, asset_id: str) -> AssetRecord | None:
-        with self._session_factory() as db:
-            model = db.get(AssetModel, asset_id)
-            if model is None:
-                return None
-            return self._to_asset_record(model)
 
     def list_run_events(self, run_id: str) -> list[RunEvent]:
         with self._session_factory() as db:
@@ -416,45 +367,44 @@ class AzurePostgresMetadataRepository:
 
     def register_asset(self, asset: AssetRecord) -> AssetRecord:
         with self._session_factory.begin() as db:
-            db.add(
-                AssetModel(
-                    asset_id=asset.asset_id,
-                    run_id=asset.run_id,
-                    session_id=asset.session_id,
-                    kind=asset.kind.value,
-                    blob_path=asset.blob_path,
-                    checksum=asset.checksum,
-                    mime_type=asset.mime_type,
-                    metadata_json=asset.metadata,
-                    created_at=asset.created_at,
-                )
-            )
+            existing = db.get(AssetModel, asset.asset_id)
+            if existing is None:
+                db.add(self._asset_model(asset))
+            else:
+                self._write_asset_model(existing, asset)
         return asset
 
     def list_assets(self, run_id: str) -> list[AssetRecord]:
         with self._session_factory() as db:
             stmt = select(AssetModel).where(AssetModel.run_id == run_id).order_by(AssetModel.created_at.asc())
-            return [self._to_asset_record(model) for model in db.scalars(stmt)]
+            return [self._read_asset_model(model) for model in db.scalars(stmt)]
 
     def list_session_assets(self, session_id: str, kind: str | None = None) -> list[AssetRecord]:
         with self._session_factory() as db:
-            stmt = select(AssetModel).where(AssetModel.session_id == session_id).order_by(AssetModel.created_at.asc())
+            stmt = select(AssetModel).where(AssetModel.session_id == session_id).order_by(AssetModel.created_at.desc())
             if kind is not None:
                 stmt = stmt.where(AssetModel.kind == kind)
-            return [self._to_asset_record(model) for model in db.scalars(stmt)]
+            return [self._read_asset_model(model) for model in db.scalars(stmt)]
 
     def register_metric_definition(self, metric_definition: MetricDefinition) -> MetricDefinition:
         with self._session_factory.begin() as db:
-            db.add(
-                MetricDefinitionModel(
-                    metric_definition_id=metric_definition.metric_definition_id,
-                    name=metric_definition.name,
-                    version=metric_definition.version,
-                    description=metric_definition.description,
-                    config_schema_json=metric_definition.config_schema,
-                    created_at=metric_definition.created_at,
+            existing = db.get(MetricDefinitionModel, metric_definition.metric_definition_id)
+            if existing is None:
+                db.add(
+                    MetricDefinitionModel(
+                        metric_definition_id=metric_definition.metric_definition_id,
+                        name=metric_definition.name,
+                        version=metric_definition.version,
+                        description=metric_definition.description,
+                        config_schema_json=metric_definition.config_schema,
+                        created_at=metric_definition.created_at,
+                    )
                 )
-            )
+            else:
+                existing.name = metric_definition.name
+                existing.version = metric_definition.version
+                existing.description = metric_definition.description
+                existing.config_schema_json = metric_definition.config_schema
         return metric_definition
 
     def list_metric_definitions(self) -> list[MetricDefinition]:
@@ -474,18 +424,23 @@ class AzurePostgresMetadataRepository:
 
     def register_metric_result(self, metric_result: MetricResult) -> MetricResult:
         with self._session_factory.begin() as db:
-            db.add(
-                MetricResultModel(
-                    metric_result_id=metric_result.metric_result_id,
-                    run_id=metric_result.run_id,
-                    metric_definition_id=metric_result.metric_definition_id,
-                    name=metric_result.name,
-                    version=metric_result.version,
-                    value=metric_result.value,
-                    payload_json=metric_result.payload,
-                    created_at=metric_result.created_at,
+            existing = db.get(MetricResultModel, metric_result.metric_result_id)
+            if existing is None:
+                db.add(
+                    MetricResultModel(
+                        metric_result_id=metric_result.metric_result_id,
+                        run_id=metric_result.run_id,
+                        metric_definition_id=metric_result.metric_definition_id,
+                        name=metric_result.name,
+                        version=metric_result.version,
+                        value=metric_result.value,
+                        payload_json=metric_result.payload,
+                        created_at=metric_result.created_at,
+                    )
                 )
-            )
+            else:
+                existing.value = metric_result.value
+                existing.payload_json = metric_result.payload
         return metric_result
 
     def list_metric_results(self, run_id: str | None = None) -> list[MetricResult]:
@@ -529,12 +484,35 @@ class AzurePostgresMetadataRepository:
             model = db.get(FormulaDefinitionModel, formula_definition_id)
             if model is None:
                 return None
-            return self._to_formula_definition(model)
+            return FormulaDefinitionRecord(
+                formula_definition_id=model.formula_definition_id,
+                name=model.name,
+                version=model.version,
+                status=FormulaStatus(model.status),
+                description=model.description,
+                input_requirements=model.input_requirements_json,
+                execution_spec=model.execution_spec_json,
+                provenance=model.provenance_json,
+                created_at=model.created_at,
+            )
 
     def list_formula_definitions(self) -> list[FormulaDefinitionRecord]:
         with self._session_factory() as db:
             stmt = select(FormulaDefinitionModel).order_by(FormulaDefinitionModel.created_at.desc())
-            return [self._to_formula_definition(model) for model in db.scalars(stmt)]
+            return [
+                FormulaDefinitionRecord(
+                    formula_definition_id=model.formula_definition_id,
+                    name=model.name,
+                    version=model.version,
+                    status=FormulaStatus(model.status),
+                    description=model.description,
+                    input_requirements=model.input_requirements_json,
+                    execution_spec=model.execution_spec_json,
+                    provenance=model.provenance_json,
+                    created_at=model.created_at,
+                )
+                for model in db.scalars(stmt)
+            ]
 
     def create_formula_proposal(self, proposal: FormulaProposalRecord) -> FormulaProposalRecord:
         with self._session_factory.begin() as db:
@@ -556,14 +534,33 @@ class AzurePostgresMetadataRepository:
             model = db.get(FormulaProposalModel, formula_proposal_id)
             if model is None:
                 return None
-            return self._to_formula_proposal(model)
+            return FormulaProposalRecord(
+                formula_proposal_id=model.formula_proposal_id,
+                formula_definition_id=model.formula_definition_id,
+                source_run_id=model.source_run_id,
+                research_question=model.research_question,
+                proposal_payload=model.proposal_payload_json,
+                provenance=model.provenance_json,
+                created_at=model.created_at,
+            )
 
     def list_formula_proposals(self, formula_definition_id: str | None = None) -> list[FormulaProposalRecord]:
         with self._session_factory() as db:
             stmt = select(FormulaProposalModel).order_by(FormulaProposalModel.created_at.desc())
             if formula_definition_id is not None:
                 stmt = stmt.where(FormulaProposalModel.formula_definition_id == formula_definition_id)
-            return [self._to_formula_proposal(model) for model in db.scalars(stmt)]
+            return [
+                FormulaProposalRecord(
+                    formula_proposal_id=model.formula_proposal_id,
+                    formula_definition_id=model.formula_definition_id,
+                    source_run_id=model.source_run_id,
+                    research_question=model.research_question,
+                    proposal_payload=model.proposal_payload_json,
+                    provenance=model.provenance_json,
+                    created_at=model.created_at,
+                )
+                for model in db.scalars(stmt)
+            ]
 
     def create_formula_evaluation(self, evaluation: FormulaEvaluationRecord) -> FormulaEvaluationRecord:
         with self._session_factory.begin() as db:
@@ -585,14 +582,33 @@ class AzurePostgresMetadataRepository:
             model = db.get(FormulaEvaluationModel, formula_evaluation_id)
             if model is None:
                 return None
-            return self._to_formula_evaluation(model)
+            return FormulaEvaluationRecord(
+                formula_evaluation_id=model.formula_evaluation_id,
+                formula_definition_id=model.formula_definition_id,
+                run_id=model.run_id,
+                dataset_ref=model.dataset_ref,
+                summary=model.summary_json,
+                provenance=model.provenance_json,
+                created_at=model.created_at,
+            )
 
     def list_formula_evaluations(self, formula_definition_id: str | None = None) -> list[FormulaEvaluationRecord]:
         with self._session_factory() as db:
             stmt = select(FormulaEvaluationModel).order_by(FormulaEvaluationModel.created_at.desc())
             if formula_definition_id is not None:
                 stmt = stmt.where(FormulaEvaluationModel.formula_definition_id == formula_definition_id)
-            return [self._to_formula_evaluation(model) for model in db.scalars(stmt)]
+            return [
+                FormulaEvaluationRecord(
+                    formula_evaluation_id=model.formula_evaluation_id,
+                    formula_definition_id=model.formula_definition_id,
+                    run_id=model.run_id,
+                    dataset_ref=model.dataset_ref,
+                    summary=model.summary_json,
+                    provenance=model.provenance_json,
+                    created_at=model.created_at,
+                )
+                for model in db.scalars(stmt)
+            ]
 
     def create_formula_review(self, review: FormulaReviewRecord) -> FormulaReviewRecord:
         with self._session_factory.begin() as db:
@@ -616,93 +632,129 @@ class AzurePostgresMetadataRepository:
             stmt = select(FormulaReviewModel).order_by(FormulaReviewModel.created_at.desc())
             if formula_definition_id is not None:
                 stmt = stmt.where(FormulaReviewModel.formula_definition_id == formula_definition_id)
-            return [self._to_formula_review(model) for model in db.scalars(stmt)]
-
-    def compare_runs(self, left_run_id: str, right_run_id: str) -> dict[str, Any]:
-        left = {item.name: item.value for item in self.list_metric_results(run_id=left_run_id)}
-        right = {item.name: item.value for item in self.list_metric_results(run_id=right_run_id)}
-        names = sorted(set(left) | set(right))
-        return {
-            "left_run_id": left_run_id,
-            "right_run_id": right_run_id,
-            "metrics": [
-                {
-                    "name": name,
-                    "left": left.get(name),
-                    "right": right.get(name),
-                    "delta": None if left.get(name) is None or right.get(name) is None else right[name] - left[name],
-                }
-                for name in names
-            ],
-        }
-
-    def _ensure_local_runtime_validation_columns(self) -> None:
-        if self.engine.dialect.name != "sqlite":
-            return
-        inspector = inspect(self.engine)
-        with self.engine.begin() as connection:
-            if "jobs" in inspector.get_table_names():
-                job_columns = {column["name"] for column in inspector.get_columns("jobs")}
-                if "session_id" not in job_columns:
-                    connection.execute(text("ALTER TABLE jobs ADD COLUMN session_id VARCHAR"))
-                if "run_id" not in job_columns:
-                    connection.execute(text("ALTER TABLE jobs ADD COLUMN run_id VARCHAR"))
-            if "runs" in inspector.get_table_names():
-                run_columns = {column["name"] for column in inspector.get_columns("runs")}
-                if "input_asset_ids" not in run_columns:
-                    connection.execute(text("ALTER TABLE runs ADD COLUMN input_asset_ids JSON DEFAULT '[]'"))
-                if "execution_plan" not in run_columns:
-                    connection.execute(text("ALTER TABLE runs ADD COLUMN execution_plan JSON"))
-                if "stage_results" not in run_columns:
-                    connection.execute(text("ALTER TABLE runs ADD COLUMN stage_results JSON DEFAULT '[]'"))
-            if "assets" in inspector.get_table_names():
-                asset_columns = {column["name"] for column in inspector.get_columns("assets")}
-                if "session_id" not in asset_columns:
-                    connection.execute(text("ALTER TABLE assets ADD COLUMN session_id VARCHAR"))
+            return [
+                FormulaReviewRecord(
+                    formula_review_id=model.formula_review_id,
+                    formula_definition_id=model.formula_definition_id,
+                    formula_evaluation_id=model.formula_evaluation_id,
+                    reviewer_id=model.reviewer_id,
+                    verdict=ReviewVerdict(model.verdict),
+                    notes=model.notes,
+                    evidence_bundle=ReviewEvidenceBundle(**model.evidence_bundle_json),
+                    provenance=model.provenance_json,
+                    created_at=model.created_at,
+                )
+                for model in db.scalars(stmt)
+            ]
 
     @staticmethod
     def _ensure_sqlite_parent_dir(database_url: str) -> None:
         if database_url.endswith(":memory:"):
             return
-        relative_prefix = "sqlite+pysqlite:///"
-        absolute_prefix = "sqlite+pysqlite:////"
-        if database_url.startswith(absolute_prefix):
-            raw_path = database_url.removeprefix("sqlite+pysqlite://")
-            db_path = Path(raw_path)
-        elif database_url.startswith(relative_prefix):
-            raw_path = database_url.removeprefix(relative_prefix)
-            db_path = Path.cwd() / raw_path
-        else:
-            return
-        db_path.parent.mkdir(parents=True, exist_ok=True)
+        normalized = database_url.split("///", 1)[-1]
+        Path(normalized).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
+
+    def _ensure_local_runtime_validation_columns(self) -> None:
+        with self.engine.begin() as connection:
+            inspector = inspect(connection)
+            if "assets" in inspector.get_table_names():
+                columns = {column["name"] for column in inspector.get_columns("assets")}
+                if "session_id" not in columns:
+                    connection.execute(text("ALTER TABLE assets ADD COLUMN session_id VARCHAR"))
+                if "mime_type" not in columns:
+                    connection.execute(text("ALTER TABLE assets ADD COLUMN mime_type VARCHAR DEFAULT 'application/octet-stream'"))
+            if "jobs" in inspector.get_table_names():
+                job_columns = {column["name"] for column in inspector.get_columns("jobs")}
+                if "session_id" not in job_columns:
+                    connection.execute(text("ALTER TABLE jobs ADD COLUMN session_id VARCHAR"))
 
     @staticmethod
-    def _to_run_record(model: RunModel) -> RunRecord:
+    def _run_model(run: RunRecord) -> RunModel:
+        return RunModel(
+            run_id=run.run_id,
+            session_id=run.session_id,
+            run_kind=run.run_kind.value,
+            status=run.status.value,
+            manifest_json=run.manifest.model_dump(mode="json"),
+            input_asset_ids_json=list(run.input_asset_ids),
+            execution_plan_json=run.execution_plan.model_dump(mode="json") if run.execution_plan else None,
+            stage_results_json=[item.model_dump(mode="json") for item in run.stage_results],
+            summary_json=run.summary,
+            error_json=run.error,
+            created_at=run.created_at,
+            updated_at=run.updated_at,
+        )
+
+    @staticmethod
+    def _write_run_model(model: RunModel, run: RunRecord) -> None:
+        model.session_id = run.session_id
+        model.run_kind = run.run_kind.value
+        model.status = run.status.value
+        model.manifest_json = run.manifest.model_dump(mode="json")
+        model.input_asset_ids_json = list(run.input_asset_ids)
+        model.execution_plan_json = run.execution_plan.model_dump(mode="json") if run.execution_plan else None
+        model.stage_results_json = [item.model_dump(mode="json") for item in run.stage_results]
+        model.summary_json = run.summary
+        model.error_json = run.error
+        model.created_at = run.created_at
+        model.updated_at = run.updated_at
+
+    @staticmethod
+    def _read_run_model(model: RunModel) -> RunRecord:
         return RunRecord(
             run_id=model.run_id,
             session_id=model.session_id,
             run_kind=RunKind(model.run_kind),
             status=RunStatus(model.status),
-            manifest=ExperimentManifest.model_validate(model.manifest_json),
-            input_asset_ids=model.input_asset_ids_json,
-            execution_plan=ExecutionPlan.model_validate(model.execution_plan_json) if model.execution_plan_json else None,
-            stage_results=[StageResult.model_validate(item) for item in model.stage_results_json],
-            summary=model.summary_json,
+            manifest=ExperimentManifest(**model.manifest_json),
+            input_asset_ids=list(model.input_asset_ids_json or []),
+            execution_plan=ExecutionPlan(**model.execution_plan_json) if model.execution_plan_json else None,
+            stage_results=[StageResult(**item) for item in (model.stage_results_json or [])],
+            summary=model.summary_json or {},
             error=model.error_json,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
 
     @staticmethod
-    def _to_job_record(model: JobModel) -> JobRecord:
+    def _job_model(job: JobRecord) -> JobModel:
+        return JobModel(
+            job_id=job.job_id,
+            job_type=job.job_type.value,
+            status=job.status.value,
+            session_id=job.session_id,
+            run_id=job.run_id,
+            payload_json=job.payload,
+            metadata_json=job.metadata,
+            result_json=job.result,
+            error_json=job.error,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+        )
+
+    @staticmethod
+    def _write_job_model(model: JobModel, job: JobRecord) -> None:
+        model.job_type = job.job_type.value
+        model.status = job.status.value
+        model.session_id = job.session_id
+        model.run_id = job.run_id
+        model.payload_json = job.payload
+        model.metadata_json = job.metadata
+        model.result_json = job.result
+        model.error_json = job.error
+        model.created_at = job.created_at
+        model.updated_at = job.updated_at
+
+    @staticmethod
+    def _read_job_model(model: JobModel) -> JobRecord:
         return JobRecord(
             job_id=model.job_id,
             job_type=JobType(model.job_type),
             status=JobStatus(model.status),
             session_id=model.session_id,
             run_id=model.run_id,
-            payload=model.payload_json,
-            metadata=model.metadata_json,
+            payload=model.payload_json or {},
+            metadata=model.metadata_json or {},
             result=model.result_json,
             error=model.error_json,
             created_at=model.created_at,
@@ -710,7 +762,32 @@ class AzurePostgresMetadataRepository:
         )
 
     @staticmethod
-    def _to_asset_record(model: AssetModel) -> AssetRecord:
+    def _asset_model(asset: AssetRecord) -> AssetModel:
+        return AssetModel(
+            asset_id=asset.asset_id,
+            run_id=asset.run_id,
+            session_id=asset.session_id,
+            kind=asset.kind.value,
+            blob_path=asset.blob_path,
+            checksum=asset.checksum,
+            mime_type=asset.mime_type,
+            metadata_json=asset.metadata,
+            created_at=asset.created_at,
+        )
+
+    @staticmethod
+    def _write_asset_model(model: AssetModel, asset: AssetRecord) -> None:
+        model.run_id = asset.run_id
+        model.session_id = asset.session_id
+        model.kind = asset.kind.value
+        model.blob_path = asset.blob_path
+        model.checksum = asset.checksum
+        model.mime_type = asset.mime_type
+        model.metadata_json = asset.metadata
+        model.created_at = asset.created_at
+
+    @staticmethod
+    def _read_asset_model(model: AssetModel) -> AssetRecord:
         return AssetRecord(
             asset_id=model.asset_id,
             run_id=model.run_id,
@@ -719,58 +796,6 @@ class AzurePostgresMetadataRepository:
             blob_path=model.blob_path,
             checksum=model.checksum,
             mime_type=model.mime_type,
-            metadata=model.metadata_json,
-            created_at=model.created_at,
-        )
-
-    @staticmethod
-    def _to_formula_definition(model: FormulaDefinitionModel) -> FormulaDefinitionRecord:
-        return FormulaDefinitionRecord(
-            formula_definition_id=model.formula_definition_id,
-            name=model.name,
-            version=model.version,
-            status=FormulaStatus(model.status),
-            description=model.description,
-            input_requirements=model.input_requirements_json,
-            execution_spec=model.execution_spec_json,
-            provenance=model.provenance_json,
-            created_at=model.created_at,
-        )
-
-    @staticmethod
-    def _to_formula_proposal(model: FormulaProposalModel) -> FormulaProposalRecord:
-        return FormulaProposalRecord(
-            formula_proposal_id=model.formula_proposal_id,
-            formula_definition_id=model.formula_definition_id,
-            source_run_id=model.source_run_id,
-            research_question=model.research_question,
-            proposal_payload=model.proposal_payload_json,
-            provenance=model.provenance_json,
-            created_at=model.created_at,
-        )
-
-    @staticmethod
-    def _to_formula_evaluation(model: FormulaEvaluationModel) -> FormulaEvaluationRecord:
-        return FormulaEvaluationRecord(
-            formula_evaluation_id=model.formula_evaluation_id,
-            formula_definition_id=model.formula_definition_id,
-            run_id=model.run_id,
-            dataset_ref=model.dataset_ref,
-            summary=model.summary_json,
-            provenance=model.provenance_json,
-            created_at=model.created_at,
-        )
-
-    @staticmethod
-    def _to_formula_review(model: FormulaReviewModel) -> FormulaReviewRecord:
-        return FormulaReviewRecord(
-            formula_review_id=model.formula_review_id,
-            formula_definition_id=model.formula_definition_id,
-            formula_evaluation_id=model.formula_evaluation_id,
-            reviewer_id=model.reviewer_id,
-            verdict=ReviewVerdict(model.verdict),
-            notes=model.notes,
-            evidence_bundle=ReviewEvidenceBundle.model_validate(model.evidence_bundle_json),
-            provenance=model.provenance_json,
+            metadata=model.metadata_json or {},
             created_at=model.created_at,
         )

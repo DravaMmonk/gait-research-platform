@@ -1,4 +1,4 @@
-"""Hound Forward Azure-native research platform scaffold."""
+"""Hound Forward research platform scaffold."""
 
 from .settings import PlatformSettings
 

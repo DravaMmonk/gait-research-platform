@@ -41,7 +41,7 @@ class ExperimentManifestPlanner:
             ],
             analysis=[AnalysisSpec(name="embedding_visualization", config={"method": "tsne"})],
             execution_policy=ExecutionPolicy(runner=self.default_runner, use_gpu=False),
-            tags=["azure", "research-platform", "agent-native"],
+            tags=["cloud", "research-platform", "agent-native"],
         )
 
     def plan_execution(self, goal: str, input_asset_ids: list[str] | None = None) -> ExecutionPlan:

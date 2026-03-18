@@ -9,6 +9,7 @@ from hound_forward.agent_system.planners import build_planner
 from hound_forward.agent_system.tools.registry import ToolRegistry
 from hound_forward.application import ResearchPlatformService
 from hound_forward.domain import JobType
+from hound_forward.ports import Job
 from hound_forward.settings import PlatformSettings
 from hound_forward.worker.runtime import InlineRunMonitor, PollingRunMonitor
 
@@ -22,7 +23,9 @@ class AgentRuntime:
         message = self.service.container.agent_queue.dequeue()
         if message is None:
             return None
+        return self.run_job(message)
 
+    def run_job(self, message: Job) -> dict[str, Any]:
         job = self.service.start_job(message.job_id)
         try:
             result = self.run_payload(job.payload)

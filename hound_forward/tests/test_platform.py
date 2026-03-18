@@ -1,22 +1,30 @@
 from __future__ import annotations
 
+import base64
 import importlib
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from hound_forward.adapters.metadata.azure_postgres import AzurePostgresMetadataRepository
+from hound_forward.adapters.metadata import SqlAlchemyMetadataRepository
+from hound_forward.adapters.queue.gcp_pubsub import PubSubJobQueue
 from hound_forward.adapters.queue.in_memory import InMemoryJobQueue
 from hound_forward.adapters.storage.local import LocalArtifactStore
 from hound_forward.agent_tools import AgentToolExecutor
 from hound_forward.agent_system.graphs.research_graph import ResearchGraph
 from hound_forward.agent_system.planners.experiment_planner import ExperimentManifestPlanner
 from hound_forward.agent_system.tools.registry import ToolRegistry
+from hound_forward.agent.service import create_app as create_agent_service_app
 from hound_forward.api.app import create_app
 from hound_forward.application import ResearchPlatformService, ServiceContainer
+from hound_forward.bootstrap import build_artifact_store, build_queue
 from hound_forward.domain import FormulaStatus, ReviewVerdict, RunKind, RunStatus
 from hound_forward.pipeline import PlatformRunExecutor
+from hound_forward.ports import Job, serialize_job
+from hound_forward.settings import PlatformSettings
 from hound_forward.worker.runtime import InlineRunMonitor
+from hound_forward.worker.service import create_app as create_worker_service_app
 
 
 def fake_openai_json_response(self, *, system_prompt, user_prompt, schema_name, schema):
@@ -46,7 +54,7 @@ def fake_openai_json_response(self, *, system_prompt, user_prompt, schema_name, 
 
 
 def build_service(tmp_path: Path) -> ResearchPlatformService:
-    metadata = AzurePostgresMetadataRepository(f"sqlite+pysqlite:///{tmp_path / 'platform.db'}")
+    metadata = SqlAlchemyMetadataRepository(f"sqlite+pysqlite:///{tmp_path / 'platform.db'}")
     metadata.create_all()
     artifact_store = LocalArtifactStore(tmp_path / "artifacts")
     queue = InMemoryJobQueue(queue_name="runs")
@@ -71,6 +79,11 @@ def upload_video(service: ResearchPlatformService, session_id: str, name: str = 
         content=content or b"fake-video-binary",
         mime_type="video/mp4",
     )
+
+
+def encode_pubsub_job(job: Job) -> dict:
+    encoded = base64.b64encode(json.dumps(serialize_job(job)).encode("utf-8")).decode("utf-8")
+    return {"message": {"data": encoded}}
 
 
 def test_session_attachment_upload_supports_image_and_text_assets(tmp_path: Path) -> None:
@@ -732,3 +745,109 @@ def test_api_chat_explains_existing_run(tmp_path: Path, monkeypatch) -> None:
     assert payload["type"] == "text"
     assert payload["run_id"] == run_id
     assert payload["structured_data"]["source_run_id"] == run_id
+
+
+def test_build_queue_supports_gcp_pubsub_settings() -> None:
+    settings = PlatformSettings(
+        queue_backend="gcp_pubsub",
+        gcp_project_id="test-project",
+        gcp_pubsub_run_topic="runs-topic",
+        gcp_pubsub_run_subscription="runs-subscription",
+    )
+
+    queue = build_queue(
+        settings=settings,
+        queue_name=settings.queue.run.name,
+        topic=settings.queue.run.topic,
+        subscription=settings.queue.run.subscription,
+    )
+
+    assert isinstance(queue, PubSubJobQueue)
+    assert queue.project_id == "test-project"
+    assert queue.topic == "runs-topic"
+    assert queue.subscription == "runs-subscription"
+
+
+def test_build_artifact_store_requires_bucket_for_gcs_backend(tmp_path: Path) -> None:
+    settings = PlatformSettings(
+        artifact_backend="gcs",
+        artifact_root=tmp_path / "artifacts",
+        gcp_project_id="test-project",
+    )
+
+    try:
+        build_artifact_store(settings)
+    except ValueError as exc:
+        assert "HF_GCP_STORAGE_BUCKET" in str(exc)
+    else:
+        raise AssertionError("Expected GCS artifact store construction to require a bucket.")
+
+
+def test_agent_cloud_run_service_processes_pubsub_job(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'agent-service.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "agent-service-artifacts"))
+    app_module = importlib.import_module("hound_forward.agent.service")
+
+    app_module.build_runtime.cache_clear()
+    client = TestClient(create_agent_service_app())
+    service = app_module.build_runtime().service
+
+    session = service.create_session(title="Agent service session")
+    upload_video(service, session.session_id)
+    agent_job = service.submit_agent_job(session_id=session.session_id, goal="Evaluate a Cloud Run agent request")
+
+    response = client.post(
+        "/pubsub/agent-jobs",
+        json=encode_pubsub_job(
+            Job(
+                job_id=agent_job.job_id,
+                job_type=agent_job.job_type.value,
+                run_id=agent_job.run_id or "",
+                session_id=agent_job.session_id,
+                payload=agent_job.payload,
+                metadata=agent_job.metadata,
+            )
+        ),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "completed"
+    assert payload["run_status"] == "completed"
+
+
+def test_worker_cloud_run_service_processes_pubsub_job(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'worker-service.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "worker-service-artifacts"))
+    app_module = importlib.import_module("hound_forward.worker.service")
+
+    app_module.build_runtime.cache_clear()
+    client = TestClient(create_worker_service_app())
+    service = app_module.build_runtime().service
+
+    session = service.create_session(title="Worker service session")
+    video = upload_video(service, session.session_id)
+    manifest = ExperimentManifestPlanner().plan("Evaluate worker service flow", dataset_video_ids=["video-001"])
+    manifest.input_asset_ids = [video.asset.asset_id]
+    run = service.create_run(session.session_id, manifest)
+    service.enqueue_run(run.run_id)
+    run_job = service.list_jobs(run_id=run.run_id)[0]
+
+    response = client.post(
+        "/pubsub/run-jobs",
+        json=encode_pubsub_job(
+            Job(
+                job_id=run_job.job_id,
+                job_type=run_job.job_type.value,
+                run_id=run.run_id,
+                session_id=session.session_id,
+                payload=run_job.payload,
+                metadata=run_job.metadata,
+            )
+        ),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run_id"] == run.run_id
+    assert payload["status"] == "completed"

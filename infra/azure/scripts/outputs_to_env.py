@@ -32,10 +32,10 @@ def main() -> int:
     service_bus = contract.get("service_bus", {})
 
     env_lines = [
+      "HF_ARTIFACT_BACKEND=azure_blob",
       f"HF_AZURE_BLOB_ACCOUNT_URL={blob.get('account_url', '')}",
       f"HF_AZURE_BLOB_CONTAINER={blob.get('container', '')}",
       f"HF_AZURE_SERVICE_BUS_NAMESPACE={service_bus.get('namespace', '')}",
-      f"HF_AZURE_SERVICE_BUS_QUEUE={service_bus.get('run_queue', '')}",
       f"HF_AZURE_SERVICE_BUS_RUN_QUEUE={service_bus.get('run_queue', '')}",
       f"HF_AZURE_SERVICE_BUS_AGENT_QUEUE={service_bus.get('agent_queue', '')}",
     ]
