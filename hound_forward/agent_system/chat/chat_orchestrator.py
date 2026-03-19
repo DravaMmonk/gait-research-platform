@@ -68,7 +68,7 @@ class ChatOrchestrator:
             recommendation=graph_state.get("recommendation"),
             intent=ChatIntent.RUN_ANALYSIS,
         )
-        explanation = self.reasoner.explain_result(message=message, result_payload=structured_data)
+        explanation = self._describe_run_outcome(run_detail=run_detail, message=message, structured_data=structured_data)
         logger.info(
             "Chat orchestrator completed run_analysis run_id=%s stage_count=%s",
             run_id,
@@ -94,7 +94,7 @@ class ChatOrchestrator:
             "metrics": [metric.model_dump(mode="json") for metric in run_detail.metrics],
             "tool_trace": [item.model_dump(mode="json") for item in self._build_tool_trace(run_detail=run_detail)],
         }
-        explanation = self.reasoner.explain_result(message=message, result_payload=structured_data)
+        explanation = self._describe_run_outcome(run_detail=run_detail, message=message, structured_data=structured_data)
         logger.info("Chat orchestrator explained run_id=%s", run_detail.run.run_id)
         return ChatResponse(
             type=ChatResponseType.TEXT,
@@ -106,6 +106,7 @@ class ChatOrchestrator:
     def _answer_question(self, *, session_id: str, message: str) -> ChatResponse:
         session = self.service.container.metadata.get_session(session_id)
         runs = self.service.list_runs(session_id=session_id)
+        latest_run = self._latest_run(session_id=session_id)
         available_tools = ToolRegistry(self.service).describe_tools()
         current_session_assets = [
             {
@@ -130,6 +131,7 @@ class ChatOrchestrator:
             "session_id": session_id,
             "session_title": session.title if session is not None else "unknown",
             "run_count": len(runs),
+            "latest_run_id": latest_run.run_id if latest_run is not None else None,
             "latest_completed_run_id": next((run.run_id for run in reversed(runs) if run.status == RunStatus.COMPLETED), None),
             "available_tool_count": len(available_tools),
             "video_asset_count": len(current_session_videos),
@@ -144,6 +146,12 @@ class ChatOrchestrator:
                 message=message,
                 session_summary=session_summary,
                 available_tools=available_tools,
+            )
+        elif self._is_run_log_question(message):
+            answer = (
+                self._describe_run_logs(run_detail=self.service.get_run_detail(latest_run.run_id))
+                if latest_run is not None
+                else "There is no run in the current session yet, so there are no execution logs to return."
             )
         else:
             answer = self.reasoner.answer_question(
@@ -184,10 +192,13 @@ class ChatOrchestrator:
     def _resolve_source_run(self, *, session_id: str, context: ChatContext | None):
         if context is not None and context.run_id is not None:
             return self.service.get_run(context.run_id)
-        completed = [run for run in self.service.list_runs(session_id=session_id) if run.status == RunStatus.COMPLETED]
-        if not completed:
+        return self._latest_run(session_id=session_id)
+
+    def _latest_run(self, *, session_id: str):
+        runs = self.service.list_runs(session_id=session_id)
+        if not runs:
             return None
-        return sorted(completed, key=lambda item: item.created_at)[-1]
+        return sorted(runs, key=lambda item: item.created_at)[-1]
 
     def _build_run_structured_data(
         self,
@@ -203,6 +214,7 @@ class ChatOrchestrator:
             "intent": intent.value,
             "manifest": manifest,
             "execution_plan": execution_plan,
+            "run_id": run_detail.run.run_id,
             "run_summary": run_detail.run.summary,
             "metrics": [metric.model_dump(mode="json") for metric in run_detail.metrics],
             "stage_results": [stage.model_dump(mode="json") for stage in run_detail.run.stage_results],
@@ -243,6 +255,46 @@ class ChatOrchestrator:
                 for index, stage in enumerate(run_detail.run.execution_plan.stages)
             )
         return items
+
+    def _describe_run_outcome(
+        self,
+        *,
+        run_detail: RunDetailResponse,
+        message: str,
+        structured_data: dict[str, Any],
+    ) -> str:
+        if run_detail.run.status == RunStatus.FAILED:
+            return self._describe_failed_run(run_detail=run_detail)
+        return self.reasoner.explain_result(message=message, result_payload=structured_data)
+
+    @staticmethod
+    def _describe_failed_run(*, run_detail: RunDetailResponse) -> str:
+        error_message = (run_detail.run.error or {}).get("message", "Unknown execution error.")
+        referenced_assets = ", ".join(run_detail.run.input_asset_ids) or "none"
+        planned_stages = (
+            [stage.name for stage in run_detail.run.execution_plan.stages]
+            if run_detail.run.execution_plan is not None
+            else []
+        )
+        stage_summary = ", ".join(planned_stages) if planned_stages else "no stages were recorded"
+        return (
+            f"Research run {run_detail.run.run_id} failed before producing metrics. "
+            f"Input assets: {referenced_assets}. "
+            f"Planned stages: {stage_summary}. "
+            f"Error: {error_message}"
+        )
+
+    @staticmethod
+    def _describe_run_logs(*, run_detail: RunDetailResponse) -> str:
+        if run_detail.run.status == RunStatus.FAILED:
+            return ChatOrchestrator._describe_failed_run(run_detail=run_detail)
+
+        metric_fragments = [f"{item.name}={item.value:.2f}" for item in run_detail.metrics]
+        return (
+            f"Execution log for run {run_detail.run.run_id}: status={run_detail.run.status.value}, "
+            f"stages={len(run_detail.run.stage_results)}, "
+            f"metrics={', '.join(metric_fragments) if metric_fragments else 'none'}."
+        )
 
     @staticmethod
     def _is_tool_inventory_question(message: str) -> bool:
@@ -285,6 +337,22 @@ class ChatOrchestrator:
         if not any(marker in normalized for marker in ("attachment", "attachments", "file", "files", "image", "text file")):
             return False
         return any(marker in normalized for marker in ("current session", "this session", "uploaded", "available", "list"))
+
+    @staticmethod
+    def _is_run_log_question(message: str) -> bool:
+        normalized = message.lower()
+        markers = (
+            "run log",
+            "run logs",
+            "execution log",
+            "execution logs",
+            "show logs",
+            "return logs",
+            "返回执行日志",
+            "执行日志",
+            "运行日志",
+        )
+        return any(marker in normalized for marker in markers)
 
     @staticmethod
     def _describe_current_session_videos(current_session_videos: list[dict[str, str]]) -> str:

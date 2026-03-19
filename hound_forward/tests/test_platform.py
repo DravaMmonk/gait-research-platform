@@ -33,6 +33,8 @@ def fake_openai_json_response(self, *, system_prompt, user_prompt, schema_name, 
             return {"intent": "ask_question"}
         if "uploaded video assets in the current session" in user_prompt.lower():
             return {"intent": "ask_question"}
+        if "返回执行日志" in user_prompt:
+            return {"intent": "ask_question"}
         if "what does this result mean" in user_prompt.lower():
             return {"intent": "explain_result"}
         if "stride length" in user_prompt.lower():
@@ -804,6 +806,158 @@ def test_api_chat_explains_existing_run(tmp_path: Path, monkeypatch) -> None:
     assert payload["type"] == "text"
     assert payload["run_id"] == run_id
     assert payload["structured_data"]["source_run_id"] == run_id
+
+
+def test_api_chat_run_analysis_reports_deterministic_failure_details(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'chat-failed-run.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "chat-failed-run-artifacts"))
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.intent_router.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.reasoner.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_chat_orchestrator.cache_clear()
+    service = app_module.build_service()
+
+    def fail_execute(_run):
+        raise RuntimeError("ffprobe failed: moov atom not found")
+
+    monkeypatch.setattr(service.container.executor, "execute", fail_execute)
+    client = TestClient(create_app())
+
+    session_response = client.post("/sessions", json={"title": "Failed run session"})
+    session = session_response.json()
+    upload_response = client.post(
+        f"/sessions/{session['session_id']}/videos",
+        files={"file": ("broken.mp4", b"fake-video-binary", "video/mp4")},
+    )
+    asset_id = upload_response.json()["asset"]["asset_id"]
+
+    response = client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "Analyze my dog's gait"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["type"] == "run"
+    assert payload["run_id"]
+    assert "failed before producing metrics" in payload["message"]
+    assert "ffprobe failed: moov atom not found" in payload["message"]
+    assert asset_id in payload["message"]
+    assert "two videos" not in payload["message"].lower()
+
+
+def test_api_chat_explains_latest_failed_run_when_no_context_is_provided(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'chat-latest-run.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "chat-latest-run-artifacts"))
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.intent_router.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.reasoner.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_chat_orchestrator.cache_clear()
+    service = app_module.build_service()
+    client = TestClient(create_app())
+
+    session_response = client.post("/sessions", json={"title": "Latest run resolution session"})
+    session = session_response.json()
+    client.post(
+        f"/sessions/{session['session_id']}/videos",
+        files={"file": ("sample.mp4", b"fake-video-binary", "video/mp4")},
+    )
+
+    successful = client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "Analyze my dog's gait"},
+    )
+    successful_run_id = successful.json()["run_id"]
+
+    def fail_execute(_run):
+        raise RuntimeError("decoder failed: invalid input container")
+
+    monkeypatch.setattr(service.container.executor, "execute", fail_execute)
+    failed = client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "Analyze my dog's gait again"},
+    )
+    failed_run_id = failed.json()["run_id"]
+
+    explain_response = client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "What does this result mean?"},
+    )
+    assert explain_response.status_code == 200
+    explain_payload = explain_response.json()
+
+    assert failed_run_id != successful_run_id
+    assert explain_payload["run_id"] == failed_run_id
+    assert explain_payload["structured_data"]["source_run_id"] == failed_run_id
+    assert "decoder failed: invalid input container" in explain_payload["message"]
+
+
+def test_api_chat_run_logs_question_uses_latest_run_without_context(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HF_METADATA_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'chat-run-logs.db'}")
+    monkeypatch.setenv("HF_ARTIFACT_ROOT", str(tmp_path / "chat-run-logs-artifacts"))
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.intent_router.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    monkeypatch.setattr(
+        "hound_forward.agent_system.chat.reasoner.OpenAIResponsesJSONClient.create_json",
+        fake_openai_json_response,
+    )
+    app_module = importlib.import_module("hound_forward.api.app")
+
+    app_module.build_service.cache_clear()
+    app_module.build_chat_orchestrator.cache_clear()
+    service = app_module.build_service()
+    client = TestClient(create_app())
+
+    session_response = client.post("/sessions", json={"title": "Run logs session"})
+    session = session_response.json()
+    client.post(
+        f"/sessions/{session['session_id']}/videos",
+        files={"file": ("sample.mp4", b"fake-video-binary", "video/mp4")},
+    )
+    client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "Analyze my dog's gait"},
+    )
+
+    def fail_execute(_run):
+        raise RuntimeError("report generation failed: missing decoded frames")
+
+    monkeypatch.setattr(service.container.executor, "execute", fail_execute)
+    failed = client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "Analyze my dog's gait again"},
+    )
+    failed_run_id = failed.json()["run_id"]
+
+    logs_response = client.post(
+        "/api/chat",
+        json={"session_id": session["session_id"], "message": "返回执行日志"},
+    )
+    assert logs_response.status_code == 200
+    logs_payload = logs_response.json()
+
+    assert logs_payload["type"] == "text"
+    assert logs_payload["structured_data"]["context"]["latest_run_id"] == failed_run_id
+    assert failed_run_id in logs_payload["message"]
+    assert "report generation failed: missing decoded frames" in logs_payload["message"]
 
 
 def test_build_queue_supports_gcp_pubsub_settings() -> None:

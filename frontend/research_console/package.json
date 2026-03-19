@@ -12,6 +12,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@ai-sdk/google-vertex": "^4.0.80",
+    "@ai-sdk/openai": "^3.0.41",
     "@ai-sdk/react": "^3.0.118",
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-select": "^2.2.6",
@@ -24,7 +26,8 @@
     "next": "^16.1.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "22.15.3",

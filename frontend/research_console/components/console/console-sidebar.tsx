@@ -76,8 +76,8 @@ function ExpandedSessionList({
   onSelectSession: (sessionId: string) => void;
 }) {
   return (
-    <ScrollArea className="min-h-0 flex-1">
-      <div className="grid gap-3 pr-3">
+    <ScrollArea className="-mr-3 min-h-0 flex-1 pr-3">
+      <div className="grid gap-3">
         {sessions.map((session) => {
           const isActive = session.session_id === activeSessionId;
 
@@ -88,7 +88,7 @@ function ExpandedSessionList({
               padding="none"
               className={cn(
                 "grid grid-cols-[minmax(0,1fr)_auto] items-center overflow-hidden transition-colors",
-                isActive && "border-[hsl(var(--primary)/0.3)] bg-[linear-gradient(180deg,hsl(var(--card))_0%,hsl(var(--primary)/0.08)_100%)]",
+                isActive && "border-2 border-[hsl(var(--primary)/0.36)] bg-[hsl(var(--primary)/0.08)]",
               )}
             >
               <button

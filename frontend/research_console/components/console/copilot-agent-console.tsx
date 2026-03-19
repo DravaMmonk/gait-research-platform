@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 
-import { AiSdkWorkbench } from "@/components/console/ai-sdk-workbench";
 import { ConsoleChatFrame } from "@/components/console/console-chat-frame";
 import { ConsoleSidebar } from "@/components/console/console-sidebar";
 import { useConsoleSessions } from "@/hooks/use-console-sessions";
 
-export function AgentConsole() {
+export function CopilotAgentConsole() {
   const [isArchivedExpanded, setIsArchivedExpanded] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const {
@@ -15,6 +14,9 @@ export function AgentConsole() {
     archivedSessions,
     createSession,
     isBusy,
+    sessionDescriptor,
+    sessionStatusTone,
+    status,
     threadId,
     visibleSessions,
     archiveSession,
@@ -45,10 +47,13 @@ export function AgentConsole() {
           onToggleArchive={() => setIsArchivedExpanded((value) => !value)}
           onToggleCollapsed={() => setIsSidebarCollapsed((value) => !value)}
         />
-        <section className="grid h-dvh min-h-dvh max-h-dvh min-w-0 grid-rows-[minmax(0,1fr)_28rem] overflow-hidden xl:grid-cols-[minmax(0,1fr)_clamp(24rem,28vw,28rem)] xl:grid-rows-1">
-          <ConsoleChatFrame activeSession={activeSession} threadId={threadId} />
-          <AiSdkWorkbench />
-        </section>
+        <ConsoleChatFrame
+          activeSession={activeSession}
+          sessionDescriptor={sessionDescriptor}
+          sessionStatusTone={sessionStatusTone}
+          status={status}
+          threadId={threadId}
+        />
       </section>
     </main>
   );
